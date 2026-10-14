@@ -21,6 +21,11 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Chaves locais
+coolify_private_key.txt
+*.pem
+*.key
+
 # Environment
 .env
 .env.local
