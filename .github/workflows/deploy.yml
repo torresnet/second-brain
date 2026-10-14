@@ -1,0 +1,29 @@
+name: Deploy Automático (Coolify)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Disparar Deploy no Coolify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar API do Coolify
+        run: |
+          response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"uuid":"dog8k0ks8c4g8k0o48gswswc","force":false}' \
+            http://116.203.95.162:8000/api/v1/deploy)
+
+          echo "$response"
+          status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
+
+          if [ "$status" -eq 200 ] || [ "$status" -eq 201 ]; then
+            echo "✅ Deploy enfileirado com sucesso no Coolify!"
+          else
+            echo "❌ Falha ao enfileirar deploy (HTTP $status)"
+            exit 1
+          fi

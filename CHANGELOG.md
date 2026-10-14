@@ -5,6 +5,13 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.2.1] - 2026-10-14
+
+### Adicionado
+- Pipeline de **CI/CD com Auto-Deploy** via GitHub Actions (`.github/workflows/deploy.yml`) integrado à API REST do Coolify.
+- Subdomínio personalizado em produção com SSL automático Let's Encrypt: `https://2cerebro.scaladigital.com.br`.
+- Configuração de secret seguro `COOLIFY_API_TOKEN` no repositório GitHub para disparo automático a cada push na branch `main`.
+
 ## [0.2.0] - 2026-10-14
 
 ### Adicionado

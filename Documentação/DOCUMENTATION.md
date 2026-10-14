@@ -1,7 +1,7 @@
 # 🧠 Segundo Cérebro (Second Brain AI) - Documentação do Projeto
 
-**Versão:** 0.2.0  
-**Status:** MVP com Grafo Interativo, Digital Garden e GTD Integrados  
+**Versão:** 0.2.1  
+**Status:** Produção ativa em https://2cerebro.scaladigital.com.br com CI/CD Auto-Deploy  
 **Última Atualização:** 14/10/2026  
 
 ---
