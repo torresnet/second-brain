@@ -1,0 +1,245 @@
+{
+  "name": "Segundo Cérebro - Ingestão Multimodal AI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "second-brain-capture",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "id": "webhook-trigger",
+      "name": "Webhook Captura",
+      "webhookId": "second-brain-capture-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalização e Classificação de Entrada\nconst body = $input.first().json.body || $input.first().json;\nlet url = body.url ? body.url.trim() : null;\nlet text = body.text ? body.text.trim() : null;\nlet fileBase64 = body.file_base64 || null;\nlet fileMime = body.file_mime || 'text/plain';\n\nlet sourceType = 'note';\nif (url) {\n  if (/instagram\\.com\\/(reel|p)\\//i.test(url)) {\n    sourceType = 'reel';\n  } else if (/youtu(be\\.com|\\.be)/i.test(url)) {\n    sourceType = 'youtube';\n  } else if (/tiktok\\.com/i.test(url)) {\n    sourceType = 'tiktok';\n  } else if (/\\.pdf($|\\?)/i.test(url)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'article';\n  }\n} else if (fileBase64) {\n  if (/audio/i.test(fileMime)) {\n    sourceType = 'audio';\n  } else if (/pdf/i.test(fileMime)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'document';\n  }\n}\n\nreturn [{\n  json: {\n    url,\n    text,\n    fileBase64,\n    fileMime,\n    sourceType,\n    rawInput: url || text || 'Arquivo binário recebido'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 300],
+      "id": "classify-input",
+      "name": "Classificar Entrada"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Você é o processador cognitivo de um Segundo Cérebro. Analise a entrada abaixo (Tipo: {{$json.sourceType}} | Conteúdo/URL: {{$json.rawInput}}).\\nSe for um Reels, YouTube ou link de artigo, analise o tema, a mensagem central, tópicos práticos e transcrição/resumo fiel.\\nSe for um áudio ou texto, processe as ideias centrais.\\n\\nIMPORTANTE: Responda ESTRITAMENTE em formato JSON com o seguinte schema:\\n{\\n  \\\"title\\\": \\\"Título curto e intuitivo em PT-BR\\\",\\n  \\\"summary\\\": \\\"Resumo executivo em 2 a 3 parágrafos claros\\\",\\n  \\\"key_takeaways\\\": [\\\"Ponto chave 1\\\", \\\"Ponto chave 2\\\"],\\n  \\\"action_items\\\": [\\\"Ação prática imediata 1\\\", \\\"Ação prática 2\\\"],\\n  \\\"entities\\\": [\\\"Pessoa/Empresa/Tecnologia 1\\\", \\\"Conceito 2\\\"],\\n  \\\"raw_content\\\": \\\"Transcrição ou síntese completa do material\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\", \\\"tag3\\\"]\\n}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 300],
+      "id": "gemini-analysis",
+      "name": "Gemini 2.0 Flash (Análise)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai o JSON gerado pelo Gemini\nconst geminiResponse = $input.first().json;\nlet parsed = {};\ntry {\n  const rawText = geminiResponse.candidates[0].content.parts[0].text;\n  parsed = JSON.parse(rawText);\n} catch (e) {\n  parsed = {\n    title: 'Nota Capturada (' + new Date().toLocaleDateString('pt-BR') + ')',\n    summary: 'Processado automaticamente',\n    key_takeaways: [],\n    action_items: [],\n    entities: [],\n    raw_content: '',\n    tags: ['inbox']\n  };\n}\n\nconst prev = $('Classificar Entrada').first().json;\n\nreturn [{\n  json: {\n    title: parsed.title || 'Sem título',\n    summary: parsed.summary || '',\n    key_takeaways: parsed.key_takeaways || [],\n    action_items: parsed.action_items || [],\n    entities: parsed.entities || [],\n    raw_content: parsed.raw_content || '',\n    tags: parsed.tags || ['geral'],\n    stage: 'budding',\n    source_type: prev.sourceType,\n    source_url: prev.url,\n    text_for_embedding: (parsed.title || '') + ' ' + (parsed.summary || '') + ' ' + (parsed.tags || []).join(' ') + ' ' + (parsed.entities || []).join(' ')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300],
+      "id": "parse-gemini-output",
+      "name": "Parse Resposta Gemini"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={{$env.GEMINI_API_KEY}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"models/text-embedding-004\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{$json.text_for_embedding.replace(/\"/g, '\\\\\"')}}\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 300],
+      "id": "generate-embedding",
+      "name": "Gerar Embedding (text-embedding-004)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://eicmqisneklcvhakvgce.supabase.co/rest/v1/brain_items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title\": {{$json.title | toJson}},\n  \"summary\": {{$json.summary | toJson}},\n  \"source_type\": {{$json.source_type | toJson}},\n  \"source_url\": {{$json.source_url | toJson}},\n  \"raw_content\": {{$json.raw_content | toJson}},\n  \"key_takeaways\": {{$json.key_takeaways | toJson}},\n  \"action_items\": {{$json.action_items | toJson}},\n  \"entities\": {{$json.entities | toJson}},\n  \"stage\": {{$json.stage | toJson}},\n  \"tags\": {{$json.tags | toJson}},\n  \"metadata\": {}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "id": "save-brain-item",
+      "name": "Salvar no Supabase (brain_items)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://eicmqisneklcvhakvgce.supabase.co/rest/v1/brain_chunks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"item_id\": \"{{$json[0].id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{$('Parse Resposta Gemini').first().json.text_for_embedding | toJson}},\n  \"embedding\": {{ $('Gerar Embedding (text-embedding-004)').first().json.embedding.values | toJson }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 300],
+      "id": "save-brain-chunk",
+      "name": "Salvar Embedding no Supabase"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Item catalogado com sucesso no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json[0].id}}\",\n    \"title\": \"{{$('Parse Resposta Gemini').first().json.title}}\",\n    \"tags\": {{$('Parse Resposta Gemini').first().json.tags | toJson}}\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1640, 300],
+      "id": "respond-webhook",
+      "name": "Resposta Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook Captura": {
+      "main": [
+        [
+          {
+            "node": "Classificar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Gemini 2.0 Flash (Análise)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.0 Flash (Análise)": {
+      "main": [
+        [
+          {
+            "node": "Parse Resposta Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Resposta Gemini": {
+      "main": [
+        [
+          {
+            "node": "Gerar Embedding (text-embedding-004)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Embedding (text-embedding-004)": {
+      "main": [
+        [
+          {
+            "node": "Salvar no Supabase (brain_items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar no Supabase (brain_items)": {
+      "main": [
+        [
+          {
+            "node": "Salvar Embedding no Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar Embedding no Supabase": {
+      "main": [
+        [
+          {
+            "node": "Resposta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

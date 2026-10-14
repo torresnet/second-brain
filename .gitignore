@@ -1,0 +1,27 @@
+# Dependências
+node_modules/
+.pnp/
+.pnp.js
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Editor e Sistema Operacional
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+.env.*.local

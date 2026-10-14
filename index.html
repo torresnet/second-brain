@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Segundo Cérebro AI - Acervo Multimodal</title>
+  
+  <!-- SEO & PWA Meta Tags -->
+  <meta name="description" content="Segundo Cérebro pessoal para captura e consulta inteligente de Reels, vídeos do YouTube, áudios, PDFs e anotações." />
+  <meta name="theme-color" content="#0d121d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="manifest" href="/public/manifest.json" />
+
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/src/styles/index.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Header / Navbar Principal -->
+    <header class="header-glass">
+      <div class="brand-wrapper">
+        <div class="brand-logo-glow">🧠</div>
+        <div>
+          <h1 class="brand-title">Segundo Cérebro</h1>
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: -3px;">Cognitive Knowledge Base</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button id="nav-btn-feed" class="tab-btn active">
+          <span>📚</span> Acervo de Notas
+        </button>
+        <button id="nav-btn-graph" class="tab-btn">
+          <span>🕸️</span> Grafo de Conexões
+        </button>
+        <button id="nav-btn-chat" class="tab-btn">
+          <span>💬</span> Conversar com o Cérebro
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <button id="header-capture-btn" class="btn-primary">
+          <span>⚡</span> + Capturar
+        </button>
+      </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-container">
+      <!-- Aba 1: Feed de Notas e Mídias -->
+      <section id="section-feed">
+        <!-- Barra de Métricas -->
+        <div id="stats-container"></div>
+
+        <!-- Controles de Busca e Filtros -->
+        <div class="controls-bar">
+          <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="feed-search-input" class="search-input" placeholder="Buscar por tema, resumo, transcrição ou pessoa citada..." />
+          </div>
+
+          <div class="filter-pills" id="media-filters-container">
+            <button class="pill-btn active" data-type="all">Todos</button>
+            <button class="pill-btn" data-type="reel">📱 Reels / Shorts</button>
+            <button class="pill-btn" data-type="youtube">🎥 YouTube</button>
+            <button class="pill-btn" data-type="audio">🎙️ Áudio</button>
+            <button class="pill-btn" data-type="pdf">📄 PDF</button>
+            <button class="pill-btn" data-type="article">📑 Artigos</button>
+            <button class="pill-btn" data-type="note">📝 Notas</button>
+          </div>
+        </div>
+
+        <!-- Grid de Itens Catalogados -->
+        <div id="items-grid-container" class="items-grid"></div>
+
+        <!-- Empty State -->
+        <div id="empty-state-container" style="display: none; text-align: center; padding: 4rem 1rem;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">📭</div>
+          <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">Nenhum item encontrado no seu Segundo Cérebro</h3>
+          <p style="color: var(--text-muted); max-width: 480px; margin: 0 auto 1.5rem auto;">
+            Salve Reels do Instagram, links do YouTube, PDFs ou grave áudios com um clique.
+          </p>
+          <button id="empty-state-capture-btn" class="btn-primary" style="margin: 0 auto;">
+            ⚡ Capturar Primeiro Item
+          </button>
+        </div>
+      </section>
+
+      <!-- Aba 2: Grafo de Conexões (Inspirado em NoteDiscovery e Neurite) -->
+      <section id="section-graph" style="display: none;">
+        <div id="graph-mount-point"></div>
+      </section>
+
+      <!-- Aba 3: Chat Conversacional RAG -->
+      <section id="section-chat" style="display: none;">
+        <div id="chat-mount-point"></div>
+      </section>
+    </main>
+
+    <!-- Rodapé com Versão Visível (Conforme Regra de Versionamento) -->
+    <footer class="footer-bar">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+        <span>Supabase Conectado (pgvector ativo)</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span>Segundo Cérebro AI</span>
+        <span class="version-badge">v0.2.0</span>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
