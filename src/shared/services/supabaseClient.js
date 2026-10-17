@@ -68,14 +68,15 @@ export async function getBrainStats() {
 
   if (error) {
     console.error('Erro ao calcular estatísticas:', error);
-    return { total: 0, favorites: 0, byType: {}, topTags: [] };
+    return { total: 0, favorites: 0, byType: {}, topTags: [], topTagCounts: [] };
   }
 
   const stats = {
     total: data.length,
     favorites: data.filter(i => i.is_favorite).length,
     byType: {},
-    topTags: []
+    topTags: [],
+    topTagCounts: []
   };
 
   const tagCount = {};
@@ -88,10 +89,10 @@ export async function getBrainStats() {
     }
   });
 
-  stats.topTags = Object.entries(tagCount)
+  stats.topTagCounts = Object.entries(tagCount)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([tag]) => tag);
+    .slice(0, 10);
+  stats.topTags = stats.topTagCounts.map(([tag]) => tag);
 
   return stats;
 }

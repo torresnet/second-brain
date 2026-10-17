@@ -4,6 +4,7 @@ import {
   MAX_RECORD_SECONDS,
   ACCEPTED_FILE_TYPES
 } from '../shared/services/captureService.js';
+import { icon } from '../shared/utils/icons.js';
 
 export function createCaptureModal({ onSubmit }) {
   const overlay = document.createElement('div');
@@ -13,78 +14,71 @@ export function createCaptureModal({ onSubmit }) {
   overlay.innerHTML = `
     <div class="modal-box">
       <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="font-size: 1.2rem;">⚡</span>
-          <h2 style="font-size: 1.2rem; font-weight: 700;">Captura Rápida no Segundo Cérebro</h2>
-        </div>
-        <button id="capture-close-btn" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer;">✕</button>
+        <h2 class="modal-title">Capturar</h2>
+        <button id="capture-close-btn" class="icon-btn" type="button" aria-label="Fechar">${icon('close')}</button>
       </div>
 
       <div class="modal-body">
         <!-- Sub-abas de tipo de captura -->
-        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; background: rgba(0,0,0,0.3); padding: 4px; border-radius: var(--radius-full); border: 1px solid var(--border-color);">
-          <button id="cap-tab-link" class="tab-btn active" style="flex: 1; justify-content: center; font-size: 0.85rem;">🔗 Link / Reel / Vídeo</button>
-          <button id="cap-tab-note" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">📝 Anotação de Texto</button>
-          <button id="cap-tab-voice" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">🎙️ Gravar Voz</button>
-          <button id="cap-tab-file" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">📎 Arquivo</button>
+        <div class="segmented" role="tablist">
+          <button id="cap-tab-link" class="tab-btn active" type="button">${icon('link')}Link</button>
+          <button id="cap-tab-note" class="tab-btn" type="button">${icon('note')}Anotação</button>
+          <button id="cap-tab-voice" class="tab-btn" type="button">${icon('mic')}Voz</button>
+          <button id="cap-tab-file" class="tab-btn" type="button">${icon('paperclip')}Arquivo</button>
         </div>
 
         <!-- Painel 1: Link / Reels / Vídeo -->
         <div id="panel-link">
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-            Cole o link de um <strong>Reels/post do Instagram</strong>, <strong>YouTube</strong>, <strong>TikTok</strong>, <strong>site/artigo</strong>, <strong>PDF</strong> ou arquivo do <strong>Google Drive</strong> (público) para a IA ler, ouvir e indexar:
+          <p class="modal-hint">
+            Reels ou post do Instagram, YouTube, TikTok, site, PDF ou arquivo público do Google Drive. A IA lê, ouve e indexa.
           </p>
           <input type="url" id="input-capture-url" placeholder="https://www.instagram.com/reel/... ou https://youtu.be/..." 
-                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.95rem; margin-bottom: 0.75rem;" />
+                 class="field" />
           
           <input type="text" id="input-capture-title-hint" placeholder="Título ou contexto opcional (ex: Dicas de investimento do perfil X)"
-                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.9rem;" />
+                 class="field" />
         </div>
 
         <!-- Painel 2: Anotação de Texto -->
         <div id="panel-note" style="display: none;">
           <input type="text" id="input-note-title" placeholder="Título da Anotação..." 
-                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); margin-bottom: 0.75rem;" />
+                 class="field" />
           <textarea id="input-note-body" placeholder="Escreva suas ideias, aprendizados ou síntese..." 
-                    rows="5" class="chat-textarea" style="height: auto; width: 100%; border-radius: var(--radius-md); margin-bottom: 0.75rem;"></textarea>
+                    rows="5" class="field field-area"></textarea>
           <input type="text" id="input-note-tags" placeholder="Tags separadas por vírgula (ex: produtividade, ideias, ia)" 
-                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.85rem;" />
+                 class="field" />
         </div>
 
         <!-- Painel 3: Gravação de Voz -->
-        <div id="panel-voice" style="display: none; text-align: center; padding: 1.5rem 1rem;">
-          <div id="voice-record-btn" style="width: 70px; height: 70px; border-radius: 50%; background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #ef4444; font-size: 2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; cursor: pointer; transition: all 0.2s;">
-            🎙️
-          </div>
-          <div id="voice-timer" style="font-size: 1.2rem; font-weight: 700; font-family: monospace; color: var(--text-primary); margin-bottom: 0.5rem;">00:00</div>
-          <p id="voice-status-text" style="font-size: 0.85rem; color: var(--text-secondary);">Clique no microfone para começar a ditar sua nota.</p>
+        <div id="panel-voice" class="voice-panel" style="display: none;">
+          <button id="voice-record-btn" class="record-btn" type="button" aria-label="Gravar ou parar">
+            ${icon('mic')}
+          </button>
+          <div id="voice-timer" class="voice-timer">00:00</div>
+          <p id="voice-status-text" class="modal-hint">Clique no microfone para começar a ditar sua nota.</p>
         </div>
 
         <!-- Painel 4: Anexar Arquivo -->
         <div id="panel-file" style="display: none;">
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-            Anexe um <strong>PDF</strong>, <strong>imagem</strong>, <strong>áudio</strong>, <strong>vídeo</strong> ou <strong>texto</strong> (até 10 MB; para vídeos maiores, suba no Google Drive e cole o link):
+          <p class="modal-hint">
+            PDF, imagem, áudio, vídeo ou texto até 10 MB. Para vídeos maiores, suba no Google Drive e cole o link.
           </p>
-          <label id="file-dropzone" for="input-capture-file" style="display: block; text-align: center; padding: 1.5rem 1rem; border: 2px dashed var(--border-color); border-radius: var(--radius-md); cursor: pointer; color: var(--text-secondary);">
-            <div style="font-size: 1.8rem; margin-bottom: 0.25rem;">📎</div>
-            <div id="file-name-label" style="font-size: 0.9rem;">Clique para escolher ou arraste o arquivo aqui</div>
+          <label id="file-dropzone" for="input-capture-file" class="dropzone">
+            ${icon('paperclip', 'dropzone-icon')}
+            <div id="file-name-label">Clique para escolher ou arraste o arquivo aqui</div>
           </label>
           <input type="file" id="input-capture-file" style="display: none;" />
           <input type="text" id="input-file-title-hint" placeholder="Título ou contexto opcional"
-                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.9rem; margin-top: 0.75rem;" />
+                 class="field" />
         </div>
 
         <!-- Alerta de status / progresso -->
-        <div id="capture-status-box" style="display: none; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.88rem; margin-top: 0.5rem;"></div>
+        <div id="capture-status-box" class="capture-status" style="display: none;"></div>
       </div>
 
       <div class="modal-footer">
-        <button id="capture-cancel-btn" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.5rem 1rem; border-radius: var(--radius-full); cursor: pointer;">
-          Cancelar
-        </button>
-        <button id="capture-submit-btn" class="btn-primary">
-          Salvar no Cérebro ⚡
-        </button>
+        <button id="capture-cancel-btn" class="btn-ghost" type="button">Cancelar</button>
+        <button id="capture-submit-btn" class="btn-primary" type="button">Salvar</button>
       </div>
     </div>
   `;
@@ -158,11 +152,11 @@ export function createCaptureModal({ onSubmit }) {
   inputFile.addEventListener('change', () => setSelectedFile(inputFile.files[0] || null));
   ['dragenter', 'dragover'].forEach(evt => fileDropzone.addEventListener(evt, (e) => {
     e.preventDefault();
-    fileDropzone.style.borderColor = 'var(--accent-primary, #8b5cf6)';
+    fileDropzone.style.borderColor = 'var(--accent)';
   }));
   ['dragleave', 'drop'].forEach(evt => fileDropzone.addEventListener(evt, (e) => {
     e.preventDefault();
-    fileDropzone.style.borderColor = 'var(--border-color)';
+    fileDropzone.style.borderColor = '';
   }));
   fileDropzone.addEventListener('drop', (e) => setSelectedFile(e.dataTransfer.files[0] || null));
 
@@ -183,8 +177,12 @@ export function createCaptureModal({ onSubmit }) {
       inputNoteTitle.value = prefilled.title || '';
       inputNoteBody.value = prefilled.text;
       switchTab('note');
+    } else if (prefilled.mode) {
+      switchTab(prefilled.mode);
     }
     overlay.classList.add('active');
+    const firstField = { link: inputUrl, note: inputNoteBody, file: inputFileTitle }[activeMode];
+    if (firstField) setTimeout(() => firstField.focus(), 50);
   }
 
   function close() {
@@ -234,8 +232,7 @@ export function createCaptureModal({ onSubmit }) {
     recordedBlob = null;
     recordSeconds = 0;
     voiceTimer.innerText = '00:00';
-    voiceRecordBtn.style.transform = 'scale(1)';
-    voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+    voiceRecordBtn.classList.remove('recording');
     voiceStatusText.innerText = VOICE_PLACEHOLDER;
   }
 
@@ -258,14 +255,12 @@ export function createCaptureModal({ onSubmit }) {
       recorder.onstop = () => {
         releaseMic();
         recordedBlob = new Blob(audioChunks, { type: recorder.mimeType || 'audio/webm' });
-        voiceRecordBtn.style.transform = 'scale(1)';
-        voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+        voiceRecordBtn.classList.remove('recording');
         voiceStatusText.innerText = 'Áudio gravado! Clique em Salvar para a IA transcrever, ou no microfone para regravar.';
       };
 
       recorder.start();
-      voiceRecordBtn.style.transform = 'scale(1.15)';
-      voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.6)';
+      voiceRecordBtn.classList.add('recording');
       voiceStatusText.innerText = `Gravando sua voz... Fale normalmente (máx. ${MAX_RECORD_SECONDS / 60} min).`;
 
       recordInterval = setInterval(() => {
@@ -283,8 +278,7 @@ export function createCaptureModal({ onSubmit }) {
 
   function showError(message) {
     statusBox.style.display = 'block';
-    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
-    statusBox.style.color = '#f87171';
+    statusBox.className = 'capture-status error';
     statusBox.innerText = `Erro: ${message}`;
   }
 

@@ -3,35 +3,53 @@ import { escapeHtml } from '../shared/utils/markdown.js';
 
 const CLICK_MOVE_TOLERANCE = 5;
 
+// `color` é a chave da paleta lida do tema (ver readPalette); `alpha` suaviza a linha
 const LINK_STYLES = {
-  tag: { color: 'rgba(255,255,255,0.12)', width: 1, dash: [], length: 70 },
-  entity: { color: 'rgba(168,85,247,0.28)', width: 1, dash: [], length: 85 },
-  shared: { color: 'rgba(129,140,248,0.7)', width: 2, dash: [], length: 120 },
-  similar: { color: 'rgba(6,182,212,0.45)', width: 1.2, dash: [5, 5], length: 160 }
+  tag: { color: 'line', alpha: 1, width: 1, dash: [], length: 70 },
+  entity: { color: 'entity', alpha: 0.35, width: 1, dash: [], length: 85 },
+  shared: { color: 'accent', alpha: 0.8, width: 2, dash: [], length: 120 },
+  similar: { color: 'similar', alpha: 0.6, width: 1.2, dash: [5, 5], length: 160 }
 };
+
+const FALLBACK = '#6C6D75';
+
+// O canvas não entende var(--cor): resolvemos as variáveis CSS do tema atual
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || FALLBACK;
+}
+
+function readPalette() {
+  return {
+    text: cssVar('--text'),
+    muted: cssVar('--muted'),
+    surface: cssVar('--surface'),
+    line: cssVar('--line-strong'),
+    accent: cssVar('--accent'),
+    tag: cssVar('--graph-tag'),
+    entity: cssVar('--graph-entity'),
+    similar: cssVar('--graph-similar')
+  };
+}
 
 export function createGraphView(container, { onSelectNode }) {
   container.innerHTML = `
     <div class="graph-card">
       <div class="graph-bar">
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="width: 36px; height: 36px; border-radius: 10px; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">🕸️</div>
-          <div>
-            <h3 style="font-size: 1.05rem; font-weight: 700;">Grafo de Conexões do Conhecimento</h3>
-            <p id="graph-summary" style="font-size: 0.8rem; color: var(--text-muted);">Como suas notas se conectam.</p>
-          </div>
+        <div class="section-heading">
+          <h1>Conexões</h1>
+          <p id="graph-summary">Como suas notas se conectam.</p>
         </div>
         <div class="graph-controls">
-          <button id="graph-toggle-hubs" class="pill-btn active" type="button" title="Mostrar tags e entidades">Tags e entidades</button>
-          <button id="graph-toggle-similar" class="pill-btn active" type="button" title="Mostrar notas de assunto parecido">Assunto parecido</button>
-          <button id="graph-reset-btn" class="pill-btn" type="button">Centralizar</button>
+          <button id="graph-toggle-hubs" class="chip-btn active" type="button" title="Mostrar tags e entidades">Tags e entidades</button>
+          <button id="graph-toggle-similar" class="chip-btn active" type="button" title="Mostrar notas de assunto parecido">Assunto parecido</button>
+          <button id="graph-reset-btn" class="chip-btn" type="button">Centralizar</button>
         </div>
       </div>
       <div class="graph-legend">
-        <span><i class="dot" style="background:#6366f1"></i> Nota</span>
-        <span><i class="dot small" style="background:#06b6d4"></i> Tag</span>
-        <span><i class="dot small" style="background:#a855f7"></i> Entidade</span>
-        <span><i class="line" style="background:rgba(129,140,248,0.9)"></i> Citam a mesma coisa</span>
+        <span><i class="dot dot-note"></i> Nota (cor do tipo)</span>
+        <span><i class="dot small dot-tag"></i> Tag</span>
+        <span><i class="dot small dot-entity"></i> Entidade</span>
+        <span><i class="line line-shared"></i> Citam a mesma coisa</span>
         <span><i class="line dashed"></i> Assunto parecido</span>
       </div>
       <canvas id="brain-graph-canvas" style="flex: 1; width: 100%; min-height: 0; display: block; cursor: grab; touch-action: none;"></canvas>
@@ -87,12 +105,17 @@ export function createGraphView(container, { onSelectNode }) {
   }
   window.addEventListener('resize', () => resizeCanvas());
 
-  // O canvas não entende var(--cor): resolvemos a variável CSS para o valor real
+  let palette = readPalette();
+  window.addEventListener('themechange', () => {
+    palette = readPalette();
+    for (const n of nodes) if (n.rawItem) n.color = nodeColor(n.rawItem);
+    ensureLoop();
+  });
+
   function nodeColor(item) {
-    const raw = APP_CONFIG.mediaTypes[item.source_type]?.color || '#6366f1';
+    const raw = APP_CONFIG.mediaTypes[item.source_type]?.color || 'var(--badge-note)';
     const match = raw.match(/^var\((--[\w-]+)\)$/);
-    if (!match) return raw;
-    return getComputedStyle(document.documentElement).getPropertyValue(match[1]).trim() || '#6366f1';
+    return match ? cssVar(match[1]) : raw;
   }
 
   function buildGraphData() {
@@ -134,11 +157,11 @@ export function createGraphView(container, { onSelectNode }) {
 
       if (show.hubs) {
         for (const tag of Array.isArray(item.tags) ? item.tags : []) {
-          const t = hub('tag-' + String(tag).toLowerCase(), '#' + tag, 'tag', '#06b6d4', 8, node);
+          const t = hub('tag-' + String(tag).toLowerCase(), '#' + tag, 'tag', null, 8, node);
           links.push({ source: node, target: t, kind: 'tag' });
         }
         for (const entity of Array.isArray(item.entities) ? item.entities : []) {
-          const e = hub('ent-' + String(entity).toLowerCase(), String(entity), 'entity', '#a855f7', 9, node);
+          const e = hub('ent-' + String(entity).toLowerCase(), String(entity), 'entity', null, 9, node);
           links.push({ source: node, target: e, kind: 'entity' });
         }
       }
@@ -229,8 +252,8 @@ export function createGraphView(container, { onSelectNode }) {
     for (const link of links) {
       const style = LINK_STYLES[link.kind];
       const lit = !focus || (focus.has(link.source) && focus.has(link.target) && (link.source === hoveredNode || link.target === hoveredNode));
-      ctx.globalAlpha = lit ? 1 : 0.08;
-      ctx.strokeStyle = style.color;
+      ctx.globalAlpha = style.alpha * (lit ? 1 : 0.08);
+      ctx.strokeStyle = palette[style.color];
       ctx.lineWidth = style.width + (focus && lit ? 0.8 : 0);
       ctx.setLineDash(style.dash);
       ctx.beginPath();
@@ -242,21 +265,19 @@ export function createGraphView(container, { onSelectNode }) {
 
     for (const n of nodes) {
       const isHovered = n === hoveredNode;
+      const fill = n.type === 'tag' ? palette.tag : n.type === 'entity' ? palette.entity : n.color;
       ctx.globalAlpha = !focus || focus.has(n) ? 1 : 0.18;
-      ctx.shadowColor = n.color;
-      ctx.shadowBlur = isHovered ? 15 : 0;
 
       ctx.beginPath();
       ctx.arc(n.x, n.y, isHovered ? n.radius + 3 : n.radius, 0, Math.PI * 2);
-      ctx.fillStyle = n.color;
+      ctx.fillStyle = fill;
       ctx.fill();
-      ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isHovered ? palette.text : palette.surface;
+      ctx.lineWidth = isHovered ? 2 : 1.5;
       ctx.stroke();
 
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
-      ctx.font = isHovered ? 'bold 11px Inter, sans-serif' : '10px Inter, sans-serif';
+      ctx.fillStyle = isHovered ? palette.text : palette.muted;
+      ctx.font = isHovered ? '600 11px Geist, system-ui, sans-serif' : '10px Geist, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(n.label, n.x, n.y + n.radius + 13);
     }
@@ -327,7 +348,7 @@ export function createGraphView(container, { onSelectNode }) {
       canvas.style.cursor = hoveredNode.type === 'item' ? 'pointer' : 'grab';
       tooltip.style.display = 'block';
       tooltip.style.left = Math.min(pos.sx + 15, Math.max(cssWidth - 260, 0)) + 'px';
-      tooltip.style.top = (pos.sy + 70) + 'px';
+      tooltip.style.top = (pos.sy + canvas.offsetTop + 14) + 'px';
       tooltip.innerHTML = describe(hoveredNode);
     } else {
       canvas.style.cursor = 'grab';

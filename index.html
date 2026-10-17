@@ -2,129 +2,154 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Segundo Cérebro AI - Acervo Multimodal</title>
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Segundo Cérebro</title>
+
   <!-- SEO & PWA Meta Tags -->
   <meta name="description" content="Segundo Cérebro pessoal para captura e consulta inteligente de Reels, vídeos do YouTube, áudios, PDFs e anotações." />
-  <meta name="theme-color" content="#0d121d" />
+  <meta name="theme-color" content="#FBFBFA" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="manifest" href="/public/manifest.json" />
 
-  <!-- Google Fonts: Outfit & Inter -->
+  <!-- Aplica o tema salvo antes da pintura para evitar o "piscar" -->
+  <script>
+    try {
+      const t = localStorage.getItem('sb:theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) { /* armazenamento indisponível: segue o sistema */ }
+  </script>
+
+  <!-- Google Fonts: Geist (interface) & Geist Mono (metadados) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/src/styles/index.css" />
 </head>
 <body>
-  <div class="app-layout" style="display: none;">
-    <!-- Header / Navbar Principal -->
-    <header class="header-glass">
-      <div class="brand-wrapper">
-        <div class="brand-logo-glow">🧠</div>
-        <div>
-          <h1 class="brand-title">Segundo Cérebro</h1>
-          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: -3px;">Cognitive Knowledge Base</span>
+  <div class="app-layout" hidden>
+    <!-- Barra lateral (no celular vira a barra do topo) -->
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">SC</div>
+        <span class="brand-title">Segundo Cérebro</span>
+        <div class="brand-actions">
+          <div id="alert-center-mount"></div>
+          <button id="theme-toggle-btn" class="icon-btn" type="button" aria-label="Tema"></button>
+          <button id="header-logout-btn" class="icon-btn" type="button" aria-label="Sair" title="Sair">
+            <svg class="ic" aria-hidden="true"><use href="#i-logout"/></svg>
+          </button>
         </div>
       </div>
 
-      <nav class="nav-tabs">
-        <button id="nav-btn-feed" class="tab-btn active">
-          <span>📚</span> Acervo de Notas
+      <button id="command-open-btn" class="command-trigger" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+        <span>Buscar, colar link ou perguntar</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <button id="header-capture-btn" class="btn-primary capture-btn" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg> Capturar
+      </button>
+
+      <nav class="side-nav" aria-label="Seções">
+        <button id="nav-btn-feed" class="nav-item active" type="button" data-tab="feed">
+          <svg class="ic" aria-hidden="true"><use href="#i-library"/></svg>Acervo<span id="nav-count-feed" class="nav-count"></span>
         </button>
-        <button id="nav-btn-knowledge" class="tab-btn">
-          <span>🧩</span> Conhecimento
+        <button id="nav-btn-knowledge" class="nav-item" type="button" data-tab="knowledge">
+          <svg class="ic" aria-hidden="true"><use href="#i-atom"/></svg>Conhecimento
         </button>
-        <button id="nav-btn-graph" class="tab-btn">
-          <span>🕸️</span> Grafo de Conexões
+        <button id="nav-btn-graph" class="nav-item" type="button" data-tab="graph">
+          <svg class="ic" aria-hidden="true"><use href="#i-graph"/></svg>Conexões
         </button>
-        <button id="nav-btn-chat" class="tab-btn">
-          <span>💬</span> Conversar com o Cérebro
+        <button id="nav-btn-chat" class="nav-item" type="button" data-tab="chat">
+          <svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg>Perguntar
         </button>
       </nav>
 
-      <div class="header-actions">
-        <div id="alert-center-mount"></div>
-        <button id="header-capture-btn" class="btn-primary">
-          <span>⚡</span> + Capturar
-        </button>
-        <button id="header-logout-btn" class="btn-logout" type="button">Sair</button>
+      <div class="side-group">
+        <div class="side-group-title">Tipos</div>
+        <div id="type-filters" class="side-list"></div>
       </div>
-    </header>
+
+      <div class="side-group">
+        <div class="side-group-title">Temas</div>
+        <div id="tag-filters" class="side-list"></div>
+      </div>
+
+      <div class="side-footer">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Conectado</span>
+        <span class="version-badge">v0.4.0</span>
+      </div>
+    </aside>
 
     <!-- Conteúdo Principal -->
     <main class="main-container">
-      <!-- Aba 1: Feed de Notas e Mídias -->
-      <section id="section-feed">
-        <!-- Barra de Métricas -->
-        <div id="stats-container"></div>
-        <div id="indexing-banner" class="indexing-banner" style="display: none;"></div>
-
-        <!-- Controles de Busca e Filtros -->
-        <div class="controls-bar">
-          <div class="search-wrapper">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="feed-search-input" class="search-input" placeholder="Buscar por tema, resumo, transcrição ou pessoa citada..." />
+      <!-- Acervo: lista + painel de leitura -->
+      <section id="section-feed" class="feed-layout">
+        <div class="list-pane">
+          <div class="list-head">
+            <div class="list-title-row">
+              <h1 id="list-title" class="list-title">Acervo</h1>
+              <button id="list-clear-filter" class="chip-btn" type="button" hidden>Limpar filtro ✕</button>
+            </div>
+            <div class="search-wrapper">
+              <svg class="ic search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+              <input type="search" id="feed-search-input" class="search-input" placeholder="Filtrar por título, resumo ou transcrição" />
+            </div>
+            <div id="mobile-type-filters" class="mobile-filters"></div>
           </div>
 
-          <div class="filter-pills" id="media-filters-container">
-            <button class="pill-btn active" data-type="all">Todos</button>
-            <button class="pill-btn" data-type="reel">📱 Reels / Shorts</button>
-            <button class="pill-btn" data-type="youtube">🎥 YouTube</button>
-            <button class="pill-btn" data-type="audio">🎙️ Áudio</button>
-            <button class="pill-btn" data-type="pdf">📄 PDF</button>
-            <button class="pill-btn" data-type="article">📑 Artigos</button>
-            <button class="pill-btn" data-type="note">📝 Notas</button>
+          <div id="indexing-banner" class="indexing-banner" hidden></div>
+          <div id="review-strip" class="review-strip" hidden></div>
+
+          <div id="items-list" class="items-list" role="list"></div>
+
+          <div id="empty-state-container" class="empty-state" hidden>
+            <h3>Nada por aqui ainda</h3>
+            <p>Salve Reels, vídeos do YouTube, PDFs ou grave um áudio. A IA lê, resume e organiza para você.</p>
+            <button id="empty-state-capture-btn" class="btn-primary" type="button">Capturar o primeiro item</button>
           </div>
         </div>
 
-        <!-- Grid de Itens Catalogados -->
-        <div id="items-grid-container" class="items-grid"></div>
-
-        <!-- Empty State -->
-        <div id="empty-state-container" style="display: none; text-align: center; padding: 4rem 1rem;">
-          <div style="font-size: 3.5rem; margin-bottom: 1rem;">📭</div>
-          <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">Nenhum item encontrado no seu Segundo Cérebro</h3>
-          <p style="color: var(--text-muted); max-width: 480px; margin: 0 auto 1.5rem auto;">
-            Salve Reels do Instagram, links do YouTube, PDFs ou grave áudios com um clique.
-          </p>
-          <button id="empty-state-capture-btn" class="btn-primary" style="margin: 0 auto;">
-            ⚡ Capturar Primeiro Item
-          </button>
+        <div id="reader-pane" class="reader-pane">
+          <div class="reader-placeholder">
+            <svg class="ic" aria-hidden="true"><use href="#i-library"/></svg>
+            <p>Selecione uma nota para ler aqui.</p>
+            <span>Use <kbd>↑</kbd> <kbd>↓</kbd> para trocar de nota</span>
+          </div>
         </div>
       </section>
 
-      <!-- Aba: Conhecimento extraído (ferramentas, links, códigos, ideias...) -->
-      <section id="section-knowledge" style="display: none;">
+      <!-- Conhecimento extraído (ferramentas, links, códigos, ideias...) -->
+      <section id="section-knowledge" class="page-section" hidden>
         <div id="knowledge-mount-point"></div>
       </section>
 
-      <!-- Aba 2: Grafo de Conexões (Inspirado em NoteDiscovery e Neurite) -->
-      <section id="section-graph" style="display: none;">
+      <!-- Conexões entre notas -->
+      <section id="section-graph" class="page-section" hidden>
         <div id="graph-mount-point"></div>
       </section>
 
-      <!-- Aba 3: Chat Conversacional RAG -->
-      <section id="section-chat" style="display: none;">
+      <!-- Perguntar ao cérebro (RAG) -->
+      <section id="section-chat" class="page-section" hidden>
         <div id="chat-mount-point"></div>
       </section>
     </main>
 
-    <!-- Rodapé com Versão Visível (Conforme Regra de Versionamento) -->
-    <footer class="footer-bar">
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-        <span>Supabase Conectado (pgvector ativo)</span>
-      </div>
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <span>Segundo Cérebro AI</span>
-        <span class="version-badge">v0.3.1</span>
-      </div>
-    </footer>
+    <!-- Navegação inferior no celular -->
+    <nav class="tabbar" aria-label="Seções">
+      <button class="tab-item active" type="button" data-tab="feed"><svg class="ic" aria-hidden="true"><use href="#i-library"/></svg>Acervo</button>
+      <button class="tab-item" type="button" data-tab="knowledge"><svg class="ic" aria-hidden="true"><use href="#i-atom"/></svg>Conhecimento</button>
+      <button class="tab-item" type="button" data-tab="graph"><svg class="ic" aria-hidden="true"><use href="#i-graph"/></svg>Conexões</button>
+      <button class="tab-item" type="button" data-tab="chat"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg>Perguntar</button>
+    </nav>
+    <button id="mobile-capture-btn" class="fab" type="button" aria-label="Capturar">
+      <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
+    </button>
   </div>
 
   <script type="module" src="/src/main.js"></script>

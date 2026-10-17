@@ -1,12 +1,13 @@
 import { escapeHtml } from '../shared/utils/markdown.js';
+import { icon } from '../shared/utils/icons.js';
 
 const STATUS_ICON = {
   processing: '<span class="toast-spinner" aria-hidden="true"></span>',
-  done: '✅',
-  warning: '⚠️',
-  error: '❌',
-  attention: '🔔',
-  skipped: 'ℹ️'
+  done: icon('check'),
+  warning: icon('alert'),
+  error: icon('alert'),
+  attention: icon('bell'),
+  skipped: icon('info')
 };
 
 const AUTO_DISMISS_MS = { done: 4000, skipped: 4000, warning: 9000, attention: 9000 };
@@ -41,7 +42,7 @@ export function createCaptureToasts(queue) {
           <strong>${escapeHtml(job.label)}</strong>
           <span>${escapeHtml(job.status === 'processing' ? 'Processando em segundo plano…' : job.message)}</span>
         </div>
-        ${job.status === 'processing' ? '' : '<button type="button" class="toast-close" data-close aria-label="Fechar aviso">✕</button>'}
+        ${job.status === 'processing' ? '' : `<button type="button" class="toast-close" data-close aria-label="Fechar aviso">${icon('close')}</button>`}
       </div>`).join('');
     jobs.forEach(scheduleDismiss);
   }

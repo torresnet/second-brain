@@ -1,33 +1,30 @@
 import { askBrain, getBrainItemById } from '../shared/services/supabaseClient.js';
 import { copyToClipboard, getMediaBadge } from '../shared/utils/formatters.js';
 import { escapeHtml, renderMarkdown } from '../shared/utils/markdown.js';
+import { icon } from '../shared/utils/icons.js';
 
 const MAX_HISTORY_TURNS = 8;
 
 const SUGGESTIONS = [
-  { icon: '🗂️', label: 'Panorama do acervo', query: 'O que você tem salvo aqui? Faça um panorama por assunto.' },
-  { icon: '🛠️', label: 'Ferramentas salvas', query: 'Quais ferramentas e repositórios eu salvei?' },
-  { icon: '🚀', label: 'Ajuda para um projeto', query: 'Quero montar um projeto novo. O que eu já tenho salvo que pode ajudar?' },
-  { icon: '💻', label: 'Códigos e comandos', query: 'Quais códigos e comandos eu guardei e para que servem?' }
+  { label: 'Panorama do acervo', query: 'O que você tem salvo aqui? Faça um panorama por assunto.' },
+  { label: 'Ferramentas salvas', query: 'Quais ferramentas e repositórios eu salvei?' },
+  { label: 'Ajuda para um projeto', query: 'Quero montar um projeto novo. O que eu já tenho salvo que pode ajudar?' },
+  { label: 'Códigos e comandos', query: 'Quais códigos e comandos eu guardei e para que servem?' }
 ];
 
 export function createBrainChat(container, { onOpenItem }) {
   container.innerHTML = `
     <div class="chat-container">
       <div class="chat-header">
-        <div class="chat-header-info">
-          <div style="width: 38px; height: 38px; border-radius: 10px; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🧠</div>
-          <div>
-            <h3 style="font-size: 1.05rem; font-weight: 700;">Conversar com o Segundo Cérebro</h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Pergunte do seu jeito: pelo objetivo, pelo nome, pelo problema ou por uma lembrança vaga.</p>
-          </div>
+        <div class="section-heading">
+          <h1>Perguntar</h1>
+          <p>Pergunte do seu jeito: pelo objetivo, pelo nome, pelo problema ou por uma lembrança vaga.</p>
         </div>
-        <button id="chat-clear-btn" class="chat-clear-btn" type="button">Limpar conversa</button>
+        <button id="chat-clear-btn" class="chip-btn" type="button">${icon('refresh')}Limpar conversa</button>
       </div>
 
       <div class="chat-suggestions">
-        <span>Sugestões:</span>
-        ${SUGGESTIONS.map(s => `<button class="chip-suggestion pill-btn" type="button" data-query="${escapeHtml(s.query)}">${s.icon} ${escapeHtml(s.label)}</button>`).join('')}
+        ${SUGGESTIONS.map(s => `<button class="chip-suggestion chip-btn" type="button" data-query="${escapeHtml(s.query)}">${escapeHtml(s.label)}</button>`).join('')}
       </div>
 
       <div class="chat-messages" id="chat-messages-box" aria-live="polite">
@@ -37,8 +34,8 @@ export function createBrainChat(container, { onOpenItem }) {
       </div>
 
       <div class="chat-input-bar">
-        <textarea id="chat-user-input" class="chat-textarea" rows="1" maxlength="2000" placeholder="Pergunte ao seu Segundo Cérebro... (Enter envia, Shift+Enter quebra linha)"></textarea>
-        <button id="chat-send-btn" class="btn-primary" type="button" style="padding: 0 1.25rem;">Enviar ↗</button>
+        <textarea id="chat-user-input" class="chat-textarea" rows="1" maxlength="2000" placeholder="Pergunte ao seu Segundo Cérebro (Enter envia, Shift+Enter quebra linha)"></textarea>
+        <button id="chat-send-btn" class="btn-primary" type="button" aria-label="Enviar">${icon('arrow')}</button>
       </div>
     </div>
   `;
@@ -81,7 +78,7 @@ export function createBrainChat(container, { onOpenItem }) {
         .map(a => `<span class="source-atom">${escapeHtml(a.kind)}: ${escapeHtml(a.name)}</span>`).join('');
       return `
         <button type="button" class="source-card view-item-btn" data-id="${escapeHtml(source.item_id)}">
-          <span class="source-badge ${badge.cssClass}">${badge.icon} ${escapeHtml(badge.label)}</span>
+          <span class="type-chip ${badge.cssClass}">${badge.icon}${escapeHtml(badge.label)}</span>
           <strong>${escapeHtml(source.title)}</strong>
           ${atoms ? `<span class="source-atoms">${atoms}</span>` : ''}
         </button>`;
@@ -160,4 +157,6 @@ export function createBrainChat(container, { onOpenItem }) {
     messagesBox.innerHTML = '';
     addAiBubble('Conversa limpa. O que você quer encontrar no seu acervo?');
   });
+
+  return { ask: (text) => handleSend(text) };
 }

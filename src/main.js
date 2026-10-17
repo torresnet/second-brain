@@ -14,59 +14,81 @@ import {
   processItemKnowledge,
   processPendingItems
 } from './shared/services/supabaseClient.js';
+import { APP_CONFIG } from './shared/constants/config.js';
 import { createLoginScreen } from './components/LoginScreen.js';
-import { createBrainItemCard } from './components/BrainItemCard.js';
-import { renderStatsBar } from './components/StatsBar.js';
-import { createItemDetailModal } from './components/ItemDetailModal.js';
+import { createItemRow, skeletonRowsHtml } from './components/ItemRow.js';
+import { createItemDetail } from './components/ItemDetail.js';
 import { createCaptureModal } from './components/CaptureModal.js';
 import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
 import { createKnowledgeView } from './components/KnowledgeView.js';
 import { createAlertCenter } from './components/AlertCenter.js';
 import { createCaptureToasts } from './components/CaptureToasts.js';
+import { createCommandPalette } from './components/CommandPalette.js';
+import { createFeedFilters } from './components/FeedFilters.js';
+import { createReviewStrip } from './components/ReviewStrip.js';
 import { takeSharedFile } from './shared/services/captureService.js';
 import { createCaptureQueue } from './shared/services/captureQueue.js';
 import { executeCapture } from './shared/services/captureExecutor.js';
+import { setupThemeToggle } from './shared/services/theme.js';
+import { injectIconSprite, icon } from './shared/utils/icons.js';
+import { escapeHtml } from './shared/utils/markdown.js';
+import { filterItemsLocally } from './shared/utils/search.js';
+import { pickForReview, createOpenedTracker } from './shared/utils/review.js';
+
+injectIconSprite();
+setupThemeToggle(document.getElementById('theme-toggle-btn'));
+
+// Painel de leitura ao lado da lista só cabe em telas largas; abaixo disso a ficha abre como janela
+const WIDE_READER = window.matchMedia('(min-width: 1100px)');
+const SEARCH_DEBOUNCE_MS = 250;
 
 // Estado da Aplicação
 const state = {
   currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat'
   filterType: 'all',
+  filterTag: '',
   searchQuery: '',
   items: [],
-  stats: { total: 0, favorites: 0, byType: {}, topTags: [] },
-  isLoading: false,
-  itemLinks: []
+  stats: { total: 0, favorites: 0, byType: {}, topTags: [], topTagCounts: [] },
+  itemLinks: [],
+  selectedId: null
 };
 
 // Referências DOM
-const sectionFeed = document.getElementById('section-feed');
-const sectionKnowledge = document.getElementById('section-knowledge');
-const sectionGraph = document.getElementById('section-graph');
-const sectionChat = document.getElementById('section-chat');
-const navBtnFeed = document.getElementById('nav-btn-feed');
-const navBtnKnowledge = document.getElementById('nav-btn-knowledge');
-const navBtnGraph = document.getElementById('nav-btn-graph');
-const navBtnChat = document.getElementById('nav-btn-chat');
-const headerCaptureBtn = document.getElementById('header-capture-btn');
-const emptyStateCaptureBtn = document.getElementById('empty-state-capture-btn');
+const $ = (id) => document.getElementById(id);
+const sections = {
+  feed: $('section-feed'),
+  knowledge: $('section-knowledge'),
+  graph: $('section-graph'),
+  chat: $('section-chat')
+};
+const itemsList = $('items-list');
+const emptyState = $('empty-state-container');
+const searchInput = $('feed-search-input');
+const listTitle = $('list-title');
+const clearFilterBtn = $('list-clear-filter');
+const readerPane = $('reader-pane');
+const indexingBanner = $('indexing-banner');
+const navCountFeed = $('nav-count-feed');
 
-const statsContainer = document.getElementById('stats-container');
-const itemsGridContainer = document.getElementById('items-grid-container');
-const emptyStateContainer = document.getElementById('empty-state-container');
-const searchInput = document.getElementById('feed-search-input');
-const mediaFiltersContainer = document.getElementById('media-filters-container');
-const chatMountPoint = document.getElementById('chat-mount-point');
-const knowledgeMountPoint = document.getElementById('knowledge-mount-point');
-const indexingBanner = document.getElementById('indexing-banner');
-const graphMountPoint = document.getElementById('graph-mount-point');
+const openedTracker = createOpenedTracker(safeLocalStorage());
 
-// Inicialização dos Modais
-const detailModal = createItemDetailModal({
+function safeLocalStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return { getItem: () => null, setItem: () => {} };
+  }
+}
+
+// Ficha da nota (painel de leitura ou janela)
+const detail = createItemDetail({
+  readerPane,
   onDelete: async (id) => {
     try {
       await deleteBrainItem(id);
-      await loadDashboardData();
+      await loadDashboardData({ quiet: true });
     } catch (err) {
       alert('Erro ao excluir item: ' + err.message);
     }
@@ -74,19 +96,15 @@ const detailModal = createItemDetailModal({
   getRelated: (id) => relatedFor(id),
   onMerge: async (keepId, removeId) => {
     await mergeItems(keepId, removeId);
-    detailModal.close();
-    await loadDashboardData();
-    const kept = await getBrainItemById(keepId);
-    if (kept) detailModal.open(kept);
+    detail.close();
+    await loadDashboardData({ quiet: true });
+    openItemById(keepId);
     // reindexa em segundo plano para os itens extraídos refletirem o conteúdo mesclado
     processItemKnowledge(keepId)
       .catch(() => null)
-      .finally(() => { loadDashboardData(); });
+      .finally(() => { loadDashboardData({ quiet: true }); });
   },
-  onOpenRelated: async (id) => {
-    const item = await getBrainItemById(id).catch(() => null);
-    if (item) detailModal.open(item);
-  },
+  onOpenRelated: (id) => openItemById(id),
   onReprocess: async (id) => {
     // Roda na fila de segundo plano: o aviso de sucesso/erro aparece mesmo se a ficha for fechada
     const title = state.items.find(i => i.id === id)?.title || 'nota';
@@ -115,15 +133,38 @@ const detailModal = createItemDetailModal({
     }).done;
     if (failure) throw failure;
     return getBrainItemById(id);
+  },
+  onOpened: (item) => {
+    openedTracker.markOpened(item.id);
+    state.selectedId = item.id;
+    markSelectedRow();
+  },
+  onClosed: () => {
+    state.selectedId = null;
+    markSelectedRow();
   }
+});
+
+function openItem(item) {
+  detail.open(item, { inline: state.currentTab === 'feed' && WIDE_READER.matches });
+}
+
+async function openItemById(id) {
+  const item = await getBrainItemById(id).catch(() => null);
+  if (item) openItem(item);
+}
+
+// Ao cruzar a largura mínima, a ficha aberta muda de lugar (painel ↔ janela)
+WIDE_READER.addEventListener('change', () => {
+  detail.reposition(state.currentTab === 'feed' && WIDE_READER.matches);
 });
 
 // Capturas rodam em segundo plano: o modal só entrega o pedido e fecha
 const captureQueue = createCaptureQueue({
   execute: executeCapture,
   findDuplicates: findDuplicatesByUrl,
-  storage: window.localStorage,
-  onItemSaved: () => loadDashboardData()
+  storage: safeLocalStorage(),
+  onItemSaved: () => loadDashboardData({ quiet: true })
 });
 
 const captureModal = createCaptureModal({
@@ -131,12 +172,7 @@ const captureModal = createCaptureModal({
 });
 
 createCaptureToasts(captureQueue);
-createAlertCenter(document.getElementById('alert-center-mount'), captureQueue, {
-  onOpenItem: async (id) => {
-    const item = await getBrainItemById(id).catch(() => null);
-    if (item) detailModal.open(item);
-  }
-});
+createAlertCenter($('alert-center-mount'), captureQueue, { onOpenItem: openItemById });
 
 window.addEventListener('beforeunload', (e) => {
   if (!captureQueue.hasActive()) return;
@@ -144,60 +180,144 @@ window.addEventListener('beforeunload', (e) => {
   e.returnValue = '';
 });
 
-// Inicialização do Chat RAG
-createBrainChat(chatMountPoint, {
-  onOpenItem: (item) => {
-    detailModal.open(item);
+const chat = createBrainChat($('chat-mount-point'), { onOpenItem: openItem });
+const knowledgeView = createKnowledgeView($('knowledge-mount-point'), { onOpenItem: openItem });
+const graphView = createGraphView($('graph-mount-point'), {
+  onSelectNode: (item) => { if (item) openItem(item); }
+});
+
+// Barra de comando: link captura, pergunta vai para o chat, termo busca no acervo
+const palette = createCommandPalette({
+  findItems: (text) => filterItemsLocally(state.items, text),
+  onCapture: ({ url, hint }) => captureQueue.enqueue({
+    kind: 'link',
+    label: url.replace(/^https?:\/\//, '').slice(0, 60),
+    url,
+    hint
+  }),
+  onOpenCapture: (prefill) => captureModal.open(prefill),
+  onAsk: (text) => {
+    switchTab('chat');
+    chat.ask(text);
+  },
+  onSearch: (text) => {
+    switchTab('feed');
+    searchInput.value = text;
+    state.searchQuery = text;
+    loadDashboardData();
+  },
+  onOpenItem: (item) => openItem(item)
+});
+
+const filters = createFeedFilters({
+  sideTypes: $('type-filters'),
+  sideTags: $('tag-filters'),
+  mobileTypes: $('mobile-type-filters')
+}, {
+  onChange: ({ type, tag }) => {
+    state.filterType = type;
+    state.filterTag = tag;
+    switchTab('feed');
+    loadDashboardData();
   }
 });
 
-// Catálogo de conhecimento extraído (ferramentas, links, códigos, ideias...)
-const knowledgeView = createKnowledgeView(knowledgeMountPoint, {
-  onOpenItem: (item) => detailModal.open(item)
-});
-
-// Inicialização do Grafo de Conexões (Inspirado em NoteDiscovery e SamurAIGPT)
-const graphView = createGraphView(graphMountPoint, {
-  onSelectNode: (item) => {
-    if (item) detailModal.open(item);
+const reviewStrip = createReviewStrip($('review-strip'), {
+  onOpen: (item) => openItem(item),
+  onDismiss: (item) => {
+    openedTracker.markOpened(item.id);
+    renderReview();
   }
 });
 
 /**
- * Carrega itens e estatísticas do Supabase
+ * Carrega itens e estatísticas do Supabase. `quiet` evita o esqueleto (recargas em segundo plano).
  */
-async function loadDashboardData() {
-  state.isLoading = true;
-  itemsGridContainer.innerHTML = `
-    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted);">
-      <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚡</div>
-      Carregando seu Segundo Cérebro...
-    </div>
-  `;
+let loadSeq = 0;
+
+async function loadDashboardData({ quiet = false } = {}) {
+  const seq = ++loadSeq;
+  if (!quiet) itemsList.innerHTML = skeletonRowsHtml();
 
   try {
-    const [items, stats] = await Promise.all([
-      getBrainItems({ type: state.filterType, search: state.searchQuery }),
-      getBrainStats()
+    const [items, stats, links] = await Promise.all([
+      getBrainItems({ type: state.filterType, tag: state.filterTag, search: state.searchQuery }),
+      getBrainStats(),
+      getItemLinks()
     ]);
+    // Uma recarga mais nova (outro filtro ou busca) já foi pedida: descarta esta resposta
+    if (seq !== loadSeq) return;
 
     state.items = items;
     state.stats = stats;
-    state.itemLinks = await getItemLinks();
+    state.itemLinks = links;
 
-    renderStatsBar(statsContainer, stats);
-    renderItemsGrid();
+    navCountFeed.textContent = String(stats.total || 0);
+    filters.render(stats);
+    renderListHeader();
+    renderItemsList();
+    renderReview();
     graphView.update(items, state.itemLinks);
     refreshIndexBanner();
   } catch (err) {
-    itemsGridContainer.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #f87171;">
-        Erro ao carregar dados do Supabase: ${err.message}
-      </div>
-    `;
-  } finally {
-    state.isLoading = false;
+    if (seq !== loadSeq) return;
+    emptyState.hidden = true;
+    itemsList.innerHTML = `<div class="list-error">Erro ao carregar dados do Supabase: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+function hasActiveFilter() {
+  return state.filterType !== 'all' || Boolean(state.filterTag) || Boolean(state.searchQuery);
+}
+
+function renderListHeader() {
+  const typeLabel = state.filterType !== 'all' ? APP_CONFIG.mediaTypes[state.filterType]?.label : '';
+  listTitle.textContent = state.filterTag ? `#${state.filterTag}` : typeLabel || 'Acervo';
+  clearFilterBtn.hidden = !(state.filterType !== 'all' || state.filterTag);
+}
+
+function renderItemsList() {
+  itemsList.innerHTML = '';
+  const isEmpty = state.items.length === 0;
+  emptyState.hidden = !isEmpty;
+  if (isEmpty) {
+    const filtered = hasActiveFilter();
+    emptyState.querySelector('h3').textContent = filtered ? 'Nada encontrado' : 'Nada por aqui ainda';
+    emptyState.querySelector('p').textContent = filtered
+      ? 'Tente outro termo ou limpe o filtro. Para perguntar em linguagem natural, use Ctrl K.'
+      : 'Salve Reels, vídeos do YouTube, PDFs ou grave um áudio. A IA lê, resume e organiza para você.';
+    $('empty-state-capture-btn').hidden = filtered;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  state.items.forEach(item => {
+    fragment.appendChild(createItemRow(item, {
+      isSelected: item.id === state.selectedId,
+      onSelect: (selected) => openItem(selected),
+      onToggleFavorite: async (selected) => {
+        try {
+          await toggleItemFavorite(selected.id, selected.is_favorite);
+          await loadDashboardData({ quiet: true });
+        } catch (err) {
+          console.error('Erro ao favoritar:', err);
+        }
+      }
+    }));
+  });
+  itemsList.appendChild(fragment);
+}
+
+function markSelectedRow() {
+  itemsList.querySelectorAll('.item-row').forEach(row => {
+    row.classList.toggle('selected', row.dataset.id === state.selectedId);
+  });
+}
+
+function renderReview() {
+  // Só no acervo completo: com filtro ou busca, a lista já é o foco
+  const picks = hasActiveFilter() ? [] : pickForReview(state.items, openedTracker.getAll());
+  reviewStrip.render(picks);
 }
 
 /**
@@ -226,16 +346,14 @@ let isIndexing = false;
 
 async function refreshIndexBanner() {
   if (isIndexing) return;
-  const pending = await getPendingIndexCount();
-  if (!pending) {
-    indexingBanner.style.display = 'none';
-    return;
-  }
-  indexingBanner.style.display = 'flex';
+  const pending = await getPendingIndexCount().catch(() => 0);
+  indexingBanner.hidden = !pending;
+  if (!pending) return;
   indexingBanner.innerHTML = `
-    <span>🧩 <strong>${pending}</strong> ${pending === 1 ? 'item aguarda' : 'itens aguardam'} a indexação avançada (links, códigos e ferramentas ficam pesquisáveis).</span>
-    <button id="indexing-run-btn" class="btn-primary" type="button">Indexar agora</button>
-    <span id="indexing-progress"></span>
+    ${icon('atom')}
+    <span><strong>${pending}</strong> ${pending === 1 ? 'nota aguarda' : 'notas aguardam'} a indexação de links, códigos e ferramentas.</span>
+    <button id="indexing-run-btn" class="chip-btn" type="button">Indexar agora</button>
+    <span id="indexing-progress" class="indexing-progress"></span>
   `;
   indexingBanner.querySelector('#indexing-run-btn').addEventListener('click', runIndexing);
 }
@@ -269,85 +387,37 @@ async function runIndexing() {
     progress.textContent = `Interrompido: ${err.message}`;
   } finally {
     isIndexing = false;
-    setTimeout(() => { refreshIndexBanner(); loadDashboardData(); }, 2500);
+    setTimeout(() => { refreshIndexBanner(); loadDashboardData({ quiet: true }); }, 2500);
   }
 }
 
 /**
- * Renderiza o grid de cartões de notas
- */
-function renderItemsGrid() {
-  itemsGridContainer.innerHTML = '';
-
-  if (state.items.length === 0) {
-    itemsGridContainer.style.display = 'none';
-    emptyStateContainer.style.display = 'block';
-    return;
-  }
-
-  itemsGridContainer.style.display = 'grid';
-  emptyStateContainer.style.display = 'none';
-
-  state.items.forEach(item => {
-    const card = createBrainItemCard(item, {
-      onClick: (selected) => detailModal.open(selected),
-      onToggleFavorite: async (selected) => {
-        try {
-          await toggleItemFavorite(selected.id, selected.is_favorite);
-          selected.is_favorite = !selected.is_favorite;
-          await loadDashboardData();
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    });
-    itemsGridContainer.appendChild(card);
-  });
-}
-
-/**
- * Alternância de Abas (Feed, Grafo, Chat)
+ * Alternância de seções (barra lateral no desktop, barra inferior no celular)
  */
 function switchTab(tab) {
   state.currentTab = tab;
-  navBtnFeed.classList.toggle('active', tab === 'feed');
-  navBtnKnowledge.classList.toggle('active', tab === 'knowledge');
-  navBtnGraph.classList.toggle('active', tab === 'graph');
-  navBtnChat.classList.toggle('active', tab === 'chat');
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  Object.entries(sections).forEach(([name, el]) => { el.hidden = name !== tab; });
 
-  sectionFeed.style.display = tab === 'feed' ? 'block' : 'none';
-  sectionKnowledge.style.display = tab === 'knowledge' ? 'block' : 'none';
-  sectionGraph.style.display = tab === 'graph' ? 'block' : 'none';
-  sectionChat.style.display = tab === 'chat' ? 'block' : 'none';
-
-  if (tab === 'graph') {
-    graphView.update(state.items, state.itemLinks);
-  }
-  if (tab === 'knowledge') {
-    knowledgeView.refresh();
-  }
+  if (tab === 'graph') graphView.update(state.items, state.itemLinks);
+  if (tab === 'knowledge') knowledgeView.refresh();
 }
 
-navBtnFeed.addEventListener('click', () => switchTab('feed'));
-navBtnKnowledge.addEventListener('click', () => switchTab('knowledge'));
-navBtnGraph.addEventListener('click', () => switchTab('graph'));
-navBtnChat.addEventListener('click', () => switchTab('chat'));
+document.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
 
-// Botões de Abertura do Modal de Captura
-headerCaptureBtn.addEventListener('click', () => captureModal.open());
-if (emptyStateCaptureBtn) {
-  emptyStateCaptureBtn.addEventListener('click', () => captureModal.open());
-}
+// Botões de captura e da barra de comando
+[$('header-capture-btn'), $('mobile-capture-btn'), $('empty-state-capture-btn')]
+  .forEach(btn => btn.addEventListener('click', () => captureModal.open()));
+$('command-open-btn').addEventListener('click', () => palette.open());
 
-// Filtro de Mídia
-mediaFiltersContainer.addEventListener('click', (e) => {
-  const btn = e.target.closest('.pill-btn');
-  if (!btn) return;
-
-  mediaFiltersContainer.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
-  state.filterType = btn.dataset.type;
+clearFilterBtn.addEventListener('click', () => {
+  filters.reset();
+  state.filterType = 'all';
+  state.filterTag = '';
   loadDashboardData();
 });
 
@@ -358,7 +428,52 @@ searchInput.addEventListener('input', (e) => {
   searchTimeout = setTimeout(() => {
     state.searchQuery = e.target.value.trim();
     loadDashboardData();
-  }, 250);
+  }, SEARCH_DEBOUNCE_MS);
+});
+
+/**
+ * Atalhos: Ctrl/Cmd+K ou "/" abrem a barra de comando; ↑↓ (ou j/k) trocam de nota no acervo
+ */
+function isTypingTarget(el) {
+  return el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+}
+
+function moveSelection(delta) {
+  if (!state.items.length) return;
+  const index = state.items.findIndex(i => i.id === state.selectedId);
+  const next = index === -1 ? 0 : Math.min(Math.max(index + delta, 0), state.items.length - 1);
+  const item = state.items[next];
+  openItem(item);
+  const row = itemsList.querySelector(`.item-row[data-id="${CSS.escape(item.id)}"]`);
+  if (row) row.focus({ preventScroll: false });
+}
+
+// Clicar no texto da nota não dá foco a nada; lembramos onde foi o último clique
+// para as setas rolarem a leitura em vez de trocar de nota
+let lastPointerInReader = false;
+document.addEventListener('pointerdown', (e) => { lastPointerInReader = readerPane.contains(e.target); });
+
+document.addEventListener('keydown', (e) => {
+  if (!isSignedIn) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (palette.isOpen()) palette.close();
+    else palette.open();
+    return;
+  }
+  if (palette.isOpen() || isTypingTarget(e.target) || document.querySelector('.modal-overlay.active')) return;
+
+  if (e.key === '/') {
+    e.preventDefault();
+    palette.open();
+    return;
+  }
+
+  const inReader = lastPointerInReader || readerPane.contains(document.activeElement);
+  const canNavigate = state.currentTab === 'feed' && WIDE_READER.matches && !inReader;
+  if (!canNavigate || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); moveSelection(1); }
+  if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); moveSelection(-1); }
 });
 
 /**
@@ -390,7 +505,7 @@ async function checkSharedParams() {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/public/sw.js').catch(err => {
-      console.log('Service Worker não registrado:', err);
+      console.warn('Service Worker não registrado:', err);
     });
   });
 }
@@ -399,7 +514,6 @@ if ('serviceWorker' in navigator) {
  * Controle de acesso: o app só carrega dados com sessão válida do Supabase Auth
  */
 const appLayout = document.querySelector('.app-layout');
-const logoutBtn = document.getElementById('header-logout-btn');
 const loginScreen = createLoginScreen();
 let isSignedIn = null;
 
@@ -410,21 +524,22 @@ function applySession(session) {
 
   if (signedIn) {
     loginScreen.hide();
-    appLayout.style.display = '';
+    appLayout.hidden = false;
     checkSharedParams();
     loadDashboardData();
     return;
   }
 
-  appLayout.style.display = 'none';
+  appLayout.hidden = true;
   captureModal.close();
-  detailModal.close();
+  palette.close();
+  detail.close();
   state.items = [];
-  itemsGridContainer.innerHTML = '';
+  itemsList.innerHTML = '';
   loginScreen.show();
 }
 
-logoutBtn.addEventListener('click', async () => {
+$('header-logout-btn').addEventListener('click', async () => {
   try {
     await signOut();
   } catch (err) {

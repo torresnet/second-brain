@@ -1,4 +1,4 @@
-const CACHE_NAME = 'second-brain-v2';
+const CACHE_NAME = 'second-brain-v3';
 const SHARED_CACHE = 'share-target-files';
 const ASSETS = [
   '/',

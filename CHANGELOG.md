@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-10-17
+
+### Alterado
+- **Novo visual "Biblioteca silenciosa".** Interface neutra e tipográfica (Geist), uma única cor de destaque e cor apenas no tipo de mídia. Sai o gradiente ciano-violeta, o vidro fosco e os emojis, que viram ícones de traço.
+- **Tema claro e escuro**, seguindo o sistema, com botão para fixar claro, escuro ou automático (o grafo acompanha o tema).
+- **Barra lateral** com Acervo, Conhecimento, Conexões e Perguntar, filtros por tipo e por tema (tags mais usadas) com contagem. Os 4 cards de métricas saíram do topo; o total fica ao lado de "Acervo".
+- **Lista + painel de leitura.** A nota abre ao lado da lista, sem cobrir nada; ↑/↓ (ou j/k) trocam de nota. Em telas estreitas e fora do Acervo a ficha continua abrindo como janela (no celular, folha que sobe da base).
+- Ficha reorganizada: resumo, pontos-chave e o conhecimento extraído primeiro; transcrição recolhida.
+- Celular: barra de navegação inferior e botão flutuante de captura.
+- Esqueleto de carregamento no lugar do texto "Carregando…".
+
+### Adicionado
+- **Barra de comando (Ctrl K ou /).** Uma caixa para tudo: colar um link captura em segundo plano, uma pergunta vai para o chat, um termo busca no acervo e já lista as notas que combinam. Também abre a captura de anotação, voz e arquivo.
+- **Vale rever hoje.** No topo do acervo, até 3 notas salvas há mais de 7 dias e não abertas nas últimas 3 semanas (favoritas primeiro). "Já revi" tira a nota da lista. O registro de aberturas fica neste aparelho.
+
 ## [0.3.1] - 2026-10-17
 
 ### Adicionado

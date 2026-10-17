@@ -7,7 +7,7 @@ export function createLoginScreen() {
 
   screen.innerHTML = `
     <form class="login-card" id="login-form" autocomplete="on">
-      <div class="login-logo">🧠</div>
+      <div class="brand-mark login-logo" aria-hidden="true">SC</div>
       <h1 class="login-title">Segundo Cérebro</h1>
       <p class="login-subtitle">Acesso restrito. Entre para continuar.</p>
 

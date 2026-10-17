@@ -1,6 +1,7 @@
 import { getAtoms, getBrainItemById, getBrainOverview } from '../shared/services/supabaseClient.js';
 import { copyToClipboard } from '../shared/utils/formatters.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
+import { icon } from '../shared/utils/icons.js';
 
 const PAGE_SIZE = 40;
 
@@ -38,16 +39,20 @@ export function atomCardHtml(atom, { showSource = true } = {}) {
 
 export function createKnowledgeView(container, { onOpenItem }) {
   container.innerHTML = `
+    <div class="section-heading">
+      <h1>Conhecimento</h1>
+      <p>Ferramentas, links, códigos e ideias que a IA tirou de tudo o que você salvou.</p>
+    </div>
     <div class="knowledge-controls">
       <div class="search-wrapper">
-        <span class="search-icon">🔍</span>
+        ${icon('search', 'search-icon')}
         <input type="text" id="knowledge-search" class="search-input" placeholder="Filtrar ferramentas, links, códigos, ideias..." />
       </div>
-      <div class="filter-pills" id="knowledge-kinds"></div>
+      <div class="chip-row scroll" id="knowledge-kinds"></div>
     </div>
     <div id="knowledge-list" class="knowledge-list"></div>
     <div style="text-align: center; margin-top: 1rem;">
-      <button id="knowledge-more" class="pill-btn" type="button" style="display: none;">Carregar mais</button>
+      <button id="knowledge-more" class="chip-btn" type="button" style="display: none;">Carregar mais</button>
     </div>
   `;
 
@@ -62,9 +67,9 @@ export function createKnowledgeView(container, { onOpenItem }) {
   function renderKinds(byKind) {
     const entries = Object.entries(byKind || {}).sort((a, b) => b[1] - a[1]);
     kindsBox.innerHTML = [
-      `<button class="pill-btn ${state.kind ? '' : 'active'}" type="button" data-kind="">Todos</button>`,
+      `<button class="chip-btn ${state.kind ? '' : 'active'}" type="button" data-kind="">Todos</button>`,
       ...entries.map(([kind, count]) =>
-        `<button class="pill-btn ${state.kind === kind ? 'active' : ''}" type="button" data-kind="${escapeHtml(kind)}">${escapeHtml(kind)} (${count})</button>`)
+        `<button class="chip-btn ${state.kind === kind ? 'active' : ''}" type="button" data-kind="${escapeHtml(kind)}">${escapeHtml(kind)} <span class="chip-count">${count}</span></button>`)
     ].join('');
   }
 
@@ -104,7 +109,7 @@ export function createKnowledgeView(container, { onOpenItem }) {
     const btn = e.target.closest('[data-kind]');
     if (!btn) return;
     state.kind = btn.dataset.kind;
-    kindsBox.querySelectorAll('.pill-btn').forEach(b => b.classList.toggle('active', b === btn));
+    kindsBox.querySelectorAll('.chip-btn').forEach(b => b.classList.toggle('active', b === btn));
     load({ reset: true });
   });
 

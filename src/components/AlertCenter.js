@@ -1,5 +1,6 @@
 import { formatDateBR } from '../shared/utils/formatters.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
+import { icon } from '../shared/utils/icons.js';
 
 /**
  * Central de alertas: sino com contador no cabeçalho e painel com as decisões pendentes
@@ -8,8 +9,8 @@ import { escapeHtml } from '../shared/utils/markdown.js';
 export function createAlertCenter(mountPoint, queue, { onOpenItem }) {
   mountPoint.classList.add('alert-center');
   mountPoint.innerHTML = `
-    <button type="button" class="alert-bell" aria-haspopup="true" aria-expanded="false" aria-label="Central de alertas">
-      🔔<span class="alert-badge" style="display: none;"></span>
+    <button type="button" class="icon-btn alert-bell" aria-haspopup="true" aria-expanded="false" aria-label="Central de alertas">
+      ${icon('bell')}<span class="alert-badge" style="display: none;"></span>
     </button>
     <div class="alert-panel" style="display: none;" role="dialog" aria-label="Central de alertas"></div>`;
 
@@ -33,9 +34,9 @@ export function createAlertCenter(mountPoint, queue, { onOpenItem }) {
           <span>Existe a nota “${escapeHtml(alert.existing.title || 'Sem título')}” desde ${escapeHtml(formatDateBR(alert.existing.created_at))}.</span>
         </div>
         <div class="dup-actions">
-          <button type="button" class="pill-btn" data-act="open">Ver nota existente</button>
-          <button type="button" class="pill-btn" data-act="reprocess" title="Processa o link de novo e mantém as duas notas">Reprocessar e manter</button>
-          <button type="button" class="pill-btn" data-act="ignore">Ignorar</button>
+          <button type="button" class="chip-btn" data-act="open">Ver nota existente</button>
+          <button type="button" class="chip-btn" data-act="reprocess" title="Processa o link de novo e mantém as duas notas">Reprocessar e manter</button>
+          <button type="button" class="chip-btn" data-act="ignore">Ignorar</button>
         </div>
       </div>`;
   }

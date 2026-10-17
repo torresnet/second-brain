@@ -1,4 +1,5 @@
 import { APP_CONFIG } from '../constants/config.js';
+import { icon } from './icons.js';
 
 /**
  * Formata timestamp ISO para exibição amigável em português
@@ -19,26 +20,27 @@ export function formatDateBR(dateString) {
  * Retorna o ícone e badge correspondente ao tipo de mídia
  */
 export function getMediaBadge(sourceType) {
-  const config = APP_CONFIG.mediaTypes[sourceType] || APP_CONFIG.mediaTypes.note;
+  const known = APP_CONFIG.mediaTypes[sourceType];
+  const config = known || APP_CONFIG.mediaTypes.note;
   return {
     label: config.label,
-    icon: config.icon,
-    cssClass: `badge-${sourceType || 'note'}`
+    icon: icon(config.icon),
+    cssClass: `badge-${known ? sourceType : 'note'}`
   };
 }
 
 /**
- * Retorna ícone e texto do estágio de maturação do Jardim Digital (Maggie Appleton pattern)
+ * Retorna texto (e o emoji usado só no Markdown exportado) do estágio de maturação do Jardim Digital (Maggie Appleton pattern)
  */
 export function getStageBadge(stage) {
   switch (stage) {
     case 'evergreen':
-      return { label: 'Evergreen (Maduro)', icon: '🌳', color: '#10b981' };
+      return { label: 'Evergreen (Maduro)', short: 'Madura', icon: '🌳', cssClass: 'stage-evergreen' };
     case 'seedling':
-      return { label: 'Semente (Captura)', icon: '🌱', color: '#f59e0b' };
+      return { label: 'Semente (Captura)', short: 'Semente', icon: '🌱', cssClass: 'stage-seedling' };
     case 'budding':
     default:
-      return { label: 'Brotando (Em Síntese)', icon: '🌿', color: '#06b6d4' };
+      return { label: 'Brotando (Em Síntese)', short: 'Brotando', icon: '🌿', cssClass: 'stage-budding' };
   }
 }
 
