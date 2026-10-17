@@ -1,4 +1,13 @@
-import { getBrainItems, getBrainStats, toggleItemFavorite, deleteBrainItem } from './shared/services/supabaseClient.js';
+import {
+  getBrainItems,
+  getBrainStats,
+  toggleItemFavorite,
+  deleteBrainItem,
+  getSession,
+  onAuthChange,
+  signOut
+} from './shared/services/supabaseClient.js';
+import { createLoginScreen } from './components/LoginScreen.js';
 import { createBrainItemCard } from './components/BrainItemCard.js';
 import { renderStatsBar } from './components/StatsBar.js';
 import { createItemDetailModal } from './components/ItemDetailModal.js';
@@ -214,8 +223,49 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/**
+ * Controle de acesso: o app só carrega dados com sessão válida do Supabase Auth
+ */
+const appLayout = document.querySelector('.app-layout');
+const logoutBtn = document.getElementById('header-logout-btn');
+const loginScreen = createLoginScreen();
+let isSignedIn = null;
+
+function applySession(session) {
+  const signedIn = Boolean(session);
+  if (signedIn === isSignedIn) return;
+  isSignedIn = signedIn;
+
+  if (signedIn) {
+    loginScreen.hide();
+    appLayout.style.display = '';
+    checkSharedParams();
+    loadDashboardData();
+    return;
+  }
+
+  appLayout.style.display = 'none';
+  captureModal.close();
+  detailModal.close();
+  state.items = [];
+  itemsGridContainer.innerHTML = '';
+  loginScreen.show();
+}
+
+logoutBtn.addEventListener('click', async () => {
+  try {
+    await signOut();
+  } catch (err) {
+    alert('Erro ao sair: ' + err.message);
+  }
+});
+
 // Inicialização
-document.addEventListener('DOMContentLoaded', () => {
-  checkSharedParams();
-  loadDashboardData();
+document.addEventListener('DOMContentLoaded', async () => {
+  onAuthChange(applySession);
+  try {
+    applySession(await getSession());
+  } catch (err) {
+    applySession(null);
+  }
 });

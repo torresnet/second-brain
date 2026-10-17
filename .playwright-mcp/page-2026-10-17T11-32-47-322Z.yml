@@ -1,0 +1,54 @@
+- generic [ref=e1]:
+  - generic:
+    - generic:
+      - generic:
+        - button "✕"
+      - generic:
+        - heading [level=2]
+        - generic:
+          - generic: 💡 Resumo Executivo
+          - paragraph
+        - generic:
+          - generic:
+            - generic: 📝 Transcrição / Conteúdo Completo
+            - button "Copiar texto"
+      - generic:
+        - button "Excluir"
+        - generic:
+          - button "📥 Baixar Markdown (.md)"
+          - button "Fechar"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: ⚡
+          - heading "Captura Rápida no Segundo Cérebro" [level=2]
+        - button "✕"
+      - generic:
+        - generic:
+          - button "🔗 Link / Reel / Vídeo"
+          - button "📝 Anotação de Texto"
+          - button "🎙️ Gravar Voz"
+        - generic:
+          - paragraph:
+            - text: Cole o link de um
+            - strong: Instagram Reels
+            - text: ","
+            - strong: YouTube
+            - text: ","
+            - strong: TikTok
+            - text: ", artigo ou PDF para ser analisado e indexado pela IA:"
+          - textbox "https://www.instagram.com/reel/... ou https://youtu.be/..."
+          - 'textbox "Título ou contexto opcional (ex: Dicas de investimento do perfil X)"'
+      - generic:
+        - button "Cancelar"
+        - button "Salvar no Cérebro ⚡"
+  - generic [ref=e3]:
+    - generic [ref=e4]: 🧠
+    - heading "Segundo Cérebro" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Acesso restrito. Entre para continuar.
+    - generic [ref=e7]: E-mail
+    - textbox "E-mail" [active] [ref=e8]
+    - generic [ref=e9]: Senha
+    - textbox "Senha" [ref=e10]
+    - button "Entrar" [ref=e11] [cursor=pointer]

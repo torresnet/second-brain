@@ -28,7 +28,9 @@ Este workflow é o motor de ingestão inteligente que roda no seu servidor Cooli
 1. Acesse o seu painel do **n8n** no navegador.
 2. No canto superior direito, clique em **Add Workflow** (ou nos três pontinhos `...` -> **Import from File**).
 3. Selecione o arquivo `second_brain_workflow.json` desta pasta (ou copie e cole o código JSON).
-4. **Configurar a Gemini API Key**:
-   - No Coolify (nas variáveis de ambiente do n8n) ou nas credenciais do n8n, certifique-se de configurar a variável `GEMINI_API_KEY` com sua chave gratuita do [Google AI Studio](https://aistudio.google.com/).
+4. **Criar as 2 credenciais** (tipo **Header Auth**, em Credentials) e selecioná-las nos nós indicados:
+   - `Gemini API Key`: Name = `x-goog-api-key`, Value = sua chave do [Google AI Studio](https://aistudio.google.com/). Nós: *Credencial Gemini* e *Gerar Embedding*.
+   - `Supabase Anon Key`: Name = `apikey`, Value = a anon key do projeto Supabase. Nós: *Credencial Supabase*, *Salvar no Supabase (brain_items)* e *Salvar Embedding no Supabase*.
+   - O dono do cérebro é definido no banco (`supabase/auth_rls.sql`); o n8n não precisa do UUID.
 5. Clique em **Save** e ative o switch para **Active**.
 6. Copie a URL do Webhook de Produção gerada no primeiro nó.

@@ -1,11 +1,14 @@
 {
-  "name": "Segundo Cérebro - Ingestão Multimodal AI",
+  "name": "[ Alessandro ] Segundo Cérebro - Ingestão Multimodal AI",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "second-brain-capture",
-        "options": {}
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://2cerebro.scaladigital.com.br,http://localhost:5173"
+        }
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -16,18 +19,99 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-supabase-url",
+              "name": "supabaseUrl",
+              "value": "https://eicmqisneklcvhakvgce.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "cfg-gemini-model",
+              "name": "geminiModel",
+              "value": "gemini-2.0-flash",
+              "type": "string"
+            },
+            {
+              "id": "cfg-embedding-model",
+              "name": "embeddingModel",
+              "value": "text-embedding-004",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [320, 300],
+      "id": "config-node",
+      "name": "Configuração"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração').first().json.supabaseUrl }}/rest/v1/rpc/owner_check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Webhook Captura').first().json.headers.authorization }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [430, 120],
+      "id": "validate-session",
+      "name": "Credencial Supabase",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase Anon Key"
+        }
+      },
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Só o dono (definido no banco, função owner_check) pode acionar o pipeline\nif ($input.first().json.is_owner !== true) {\n  throw new Error('Não autorizado');\n}\nreturn [{ json: { body: $('Webhook Captura').first().json.body } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 120],
+      "id": "verify-owner",
+      "name": "Verificar Dono"
+    },
+    {
+      "parameters": {
         "jsCode": "// Normalização e Classificação de Entrada\nconst body = $input.first().json.body || $input.first().json;\nlet url = body.url ? body.url.trim() : null;\nlet text = body.text ? body.text.trim() : null;\nlet fileBase64 = body.file_base64 || null;\nlet fileMime = body.file_mime || 'text/plain';\n\nlet sourceType = 'note';\nif (url) {\n  if (/instagram\\.com\\/(reel|p)\\//i.test(url)) {\n    sourceType = 'reel';\n  } else if (/youtu(be\\.com|\\.be)/i.test(url)) {\n    sourceType = 'youtube';\n  } else if (/tiktok\\.com/i.test(url)) {\n    sourceType = 'tiktok';\n  } else if (/\\.pdf($|\\?)/i.test(url)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'article';\n  }\n} else if (fileBase64) {\n  if (/audio/i.test(fileMime)) {\n    sourceType = 'audio';\n  } else if (/pdf/i.test(fileMime)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'document';\n  }\n}\n\nreturn [{\n  json: {\n    url,\n    text,\n    fileBase64,\n    fileMime,\n    sourceType,\n    rawInput: url || text || 'Arquivo binário recebido'\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 300],
+      "position": [540, 300],
       "id": "classify-input",
       "name": "Classificar Entrada"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.geminiModel }}:generateContent",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -40,13 +124,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Você é o processador cognitivo de um Segundo Cérebro. Analise a entrada abaixo (Tipo: {{$json.sourceType}} | Conteúdo/URL: {{$json.rawInput}}).\\nSe for um Reels, YouTube ou link de artigo, analise o tema, a mensagem central, tópicos práticos e transcrição/resumo fiel.\\nSe for um áudio ou texto, processe as ideias centrais.\\n\\nIMPORTANTE: Responda ESTRITAMENTE em formato JSON com o seguinte schema:\\n{\\n  \\\"title\\\": \\\"Título curto e intuitivo em PT-BR\\\",\\n  \\\"summary\\\": \\\"Resumo executivo em 2 a 3 parágrafos claros\\\",\\n  \\\"key_takeaways\\\": [\\\"Ponto chave 1\\\", \\\"Ponto chave 2\\\"],\\n  \\\"action_items\\\": [\\\"Ação prática imediata 1\\\", \\\"Ação prática 2\\\"],\\n  \\\"entities\\\": [\\\"Pessoa/Empresa/Tecnologia 1\\\", \\\"Conceito 2\\\"],\\n  \\\"raw_content\\\": \\\"Transcrição ou síntese completa do material\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\", \\\"tag3\\\"]\\n}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [540, 300],
+      "position": [760, 300],
       "id": "gemini-analysis",
-      "name": "Gemini 2.0 Flash (Análise)"
+      "name": "Credencial Gemini",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)",
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -54,14 +148,14 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 300],
+      "position": [980, 300],
       "id": "parse-gemini-output",
       "name": "Parse Resposta Gemini"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={{$env.GEMINI_API_KEY}}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.embeddingModel }}:embedContent",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -73,29 +167,35 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"models/text-embedding-004\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{$json.text_for_embedding.replace(/\"/g, '\\\\\"')}}\"\n      }\n    ]\n  }\n}",
-        "options": {}
+        "jsonBody": "={\n  \"model\": \"models/{{ $('Configuração').first().json.embeddingModel }}\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{$json.text_for_embedding.replace(/\"/g, '\\\\\"')}}\"\n      }\n    ]\n  }\n}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [980, 300],
+      "position": [1200, 300],
       "id": "generate-embedding",
-      "name": "Gerar Embedding (text-embedding-004)"
+      "name": "Gerar Embedding (text-embedding-004)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)",
+      "notesInFlow": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://eicmqisneklcvhakvgce.supabase.co/rest/v1/brain_items",
+        "url": "={{ $('Configuração').first().json.supabaseUrl }}/rest/v1/brain_items",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
-            },
-            {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+              "value": "={{ $('Webhook Captura').first().json.headers.authorization }}"
             },
             {
               "name": "Content-Type",
@@ -110,28 +210,34 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"title\": {{$json.title | toJson}},\n  \"summary\": {{$json.summary | toJson}},\n  \"source_type\": {{$json.source_type | toJson}},\n  \"source_url\": {{$json.source_url | toJson}},\n  \"raw_content\": {{$json.raw_content | toJson}},\n  \"key_takeaways\": {{$json.key_takeaways | toJson}},\n  \"action_items\": {{$json.action_items | toJson}},\n  \"entities\": {{$json.entities | toJson}},\n  \"stage\": {{$json.stage | toJson}},\n  \"tags\": {{$json.tags | toJson}},\n  \"metadata\": {}\n}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 300],
+      "position": [1420, 300],
       "id": "save-brain-item",
-      "name": "Salvar no Supabase (brain_items)"
+      "name": "Salvar no Supabase (brain_items)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase Anon Key"
+        }
+      },
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
+      "notesInFlow": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://eicmqisneklcvhakvgce.supabase.co/rest/v1/brain_chunks",
+        "url": "={{ $('Configuração').first().json.supabaseUrl }}/rest/v1/brain_chunks",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
-            },
-            {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s"
+              "value": "={{ $('Webhook Captura').first().json.headers.authorization }}"
             },
             {
               "name": "Content-Type",
@@ -142,13 +248,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"item_id\": \"{{$json[0].id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{$('Parse Resposta Gemini').first().json.text_for_embedding | toJson}},\n  \"embedding\": {{ $('Gerar Embedding (text-embedding-004)').first().json.embedding.values | toJson }}\n}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 300],
+      "position": [1640, 300],
       "id": "save-brain-chunk",
-      "name": "Salvar Embedding no Supabase"
+      "name": "Salvar Embedding no Supabase",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase Anon Key"
+        }
+      },
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -158,13 +274,58 @@
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1640, 300],
+      "position": [1860, 300],
       "id": "respond-webhook",
       "name": "Resposta Webhook"
+    },
+    {
+      "parameters": {
+        "content": "## 🔑 Credenciais necessárias (Header Auth)\n\n**Supabase Anon Key** → header `apikey`\nNós: Credencial Supabase, Salvar no Supabase (brain_items), Salvar Embedding no Supabase\n\n**Gemini API Key** → header `x-goog-api-key`\nNós: Credencial Gemini, Gerar Embedding\n\nApós importar, abra cada nó acima e selecione a credencial.",
+        "height": 260,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [100, -200],
+      "id": "sticky-credentials",
+      "name": "Credenciais necessárias"
     }
   ],
   "connections": {
     "Webhook Captura": {
+      "main": [
+        [
+          {
+            "node": "Configuração",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuração": {
+      "main": [
+        [
+          {
+            "node": "Credencial Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Credencial Supabase": {
+      "main": [
+        [
+          {
+            "node": "Verificar Dono",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Dono": {
       "main": [
         [
           {
@@ -179,14 +340,14 @@
       "main": [
         [
           {
-            "node": "Gemini 2.0 Flash (Análise)",
+            "node": "Credencial Gemini",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini 2.0 Flash (Análise)": {
+    "Credencial Gemini": {
       "main": [
         [
           {

@@ -5,9 +5,10 @@ export const APP_CONFIG = {
     url: 'https://eicmqisneklcvhakvgce.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s'
   },
-  // URL do webhook de ingestão no n8n (pode ser sobrescrita nas configurações do app)
+  // Webhook de ingestão no n8n. Definido em build via VITE_N8N_WEBHOOK_URL (a URL é pública no bundle;
+  // a proteção real é o token de sessão validado pelo próprio workflow).
   n8n: {
-    defaultWebhookUrl: 'https://n8n.seu-servidor.com/webhook/second-brain-capture'
+    webhookUrl: import.meta.env.VITE_N8N_WEBHOOK_URL || ''
   },
   mediaTypes: {
     all: { label: 'Todos', icon: '🌐' },

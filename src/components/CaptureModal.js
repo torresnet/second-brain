@@ -1,4 +1,5 @@
 import { insertBrainItem } from '../shared/services/supabaseClient.js';
+import { isPipelineConfigured, sendToPipeline } from '../shared/services/captureService.js';
 
 export function createCaptureModal({ onItemSaved }) {
   const overlay = document.createElement('div');
@@ -194,15 +195,40 @@ export function createCaptureModal({ onItemSaved }) {
     }
   });
 
+  function showSuccess(message, isWarning = false) {
+    statusBox.style.display = 'block';
+    statusBox.style.background = isWarning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+    statusBox.style.color = isWarning ? '#fbbf24' : '#34d399';
+    statusBox.innerText = message;
+
+    setTimeout(() => {
+      close();
+      if (onItemSaved) onItemSaved();
+    }, isWarning ? 2500 : 900);
+  }
+
   // Salvar
   submitBtn.addEventListener('click', async () => {
     submitBtn.disabled = true;
     submitBtn.innerText = 'Processando...';
+    let pipelineWarning = '';
 
     try {
       if (activeMode === 'link') {
         const url = inputUrl.value.trim();
         if (!url) throw new Error('Por favor, informe a URL.');
+
+        if (!/^https?:\/\//i.test(url)) throw new Error('Informe uma URL começando com http:// ou https://.');
+
+        if (isPipelineConfigured()) {
+          try {
+            await sendToPipeline({ url });
+            showSuccess('✅ Link enviado e analisado pela IA!');
+            return;
+          } catch (pipelineErr) {
+            pipelineWarning = `⚠️ ${pipelineErr.message} Salvo na caixa de entrada sem análise.`;
+          }
+        }
 
         let sourceType = 'article';
         if (/instagram\.com\/(reel|p)\//i.test(url)) sourceType = 'reel';
@@ -258,15 +284,7 @@ export function createCaptureModal({ onItemSaved }) {
         await insertBrainItem(newItem);
       }
 
-      statusBox.style.display = 'block';
-      statusBox.style.background = 'rgba(16, 185, 129, 0.15)';
-      statusBox.style.color = '#34d399';
-      statusBox.innerText = '✅ Salvo com sucesso no seu Segundo Cérebro!';
-
-      setTimeout(() => {
-        close();
-        if (onItemSaved) onItemSaved();
-      }, 900);
+      showSuccess(pipelineWarning || '✅ Salvo com sucesso no seu Segundo Cérebro!', Boolean(pipelineWarning));
 
     } catch (err) {
       statusBox.style.display = 'block';
