@@ -1,5 +1,5 @@
 import { insertBrainItem } from '../shared/services/supabaseClient.js';
-import { isPipelineConfigured, sendToPipeline } from '../shared/services/captureService.js';
+import { isPipelineConfigured, sendToPipeline, readFileAsBase64, MAX_FILE_BYTES, ACCEPTED_FILE_TYPES } from '../shared/services/captureService.js';
 
 export function createCaptureModal({ onItemSaved }) {
   const overlay = document.createElement('div');
@@ -22,6 +22,7 @@ export function createCaptureModal({ onItemSaved }) {
           <button id="cap-tab-link" class="tab-btn active" style="flex: 1; justify-content: center; font-size: 0.85rem;">🔗 Link / Reel / Vídeo</button>
           <button id="cap-tab-note" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">📝 Anotação de Texto</button>
           <button id="cap-tab-voice" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">🎙️ Gravar Voz</button>
+          <button id="cap-tab-file" class="tab-btn" style="flex: 1; justify-content: center; font-size: 0.85rem;">📎 Arquivo</button>
         </div>
 
         <!-- Painel 1: Link / Reels / Vídeo -->
@@ -55,6 +56,20 @@ export function createCaptureModal({ onItemSaved }) {
           <p id="voice-status-text" style="font-size: 0.85rem; color: var(--text-secondary);">Clique no microfone para começar a ditar sua nota.</p>
         </div>
 
+        <!-- Painel 4: Anexar Arquivo -->
+        <div id="panel-file" style="display: none;">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+            Anexe um <strong>PDF</strong>, <strong>imagem</strong>, <strong>áudio</strong> ou <strong>texto</strong> (até 10 MB) para ser analisado e indexado pela IA:
+          </p>
+          <label id="file-dropzone" for="input-capture-file" style="display: block; text-align: center; padding: 1.5rem 1rem; border: 2px dashed var(--border-color); border-radius: var(--radius-md); cursor: pointer; color: var(--text-secondary);">
+            <div style="font-size: 1.8rem; margin-bottom: 0.25rem;">📎</div>
+            <div id="file-name-label" style="font-size: 0.9rem;">Clique para escolher ou arraste o arquivo aqui</div>
+          </label>
+          <input type="file" id="input-capture-file" style="display: none;" />
+          <input type="text" id="input-file-title-hint" placeholder="Título ou contexto opcional"
+                 class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.9rem; margin-top: 0.75rem;" />
+        </div>
+
         <!-- Alerta de status / progresso -->
         <div id="capture-status-box" style="display: none; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.88rem; margin-top: 0.5rem;"></div>
       </div>
@@ -70,6 +85,8 @@ export function createCaptureModal({ onItemSaved }) {
     </div>
   `;
 
+  overlay.querySelector('#input-capture-file').setAttribute('accept', ACCEPTED_FILE_TYPES);
+
   document.body.appendChild(overlay);
 
   // Seleção de elementos
@@ -80,10 +97,18 @@ export function createCaptureModal({ onItemSaved }) {
   const tabLink = overlay.querySelector('#cap-tab-link');
   const tabNote = overlay.querySelector('#cap-tab-note');
   const tabVoice = overlay.querySelector('#cap-tab-voice');
+  const tabFile = overlay.querySelector('#cap-tab-file');
 
   const panelLink = overlay.querySelector('#panel-link');
   const panelNote = overlay.querySelector('#panel-note');
   const panelVoice = overlay.querySelector('#panel-voice');
+  const panelFile = overlay.querySelector('#panel-file');
+  const inputFile = overlay.querySelector('#input-capture-file');
+  const inputFileTitle = overlay.querySelector('#input-file-title-hint');
+  const fileNameLabel = overlay.querySelector('#file-name-label');
+  const fileDropzone = overlay.querySelector('#file-dropzone');
+  const FILE_PLACEHOLDER = fileNameLabel.innerText;
+  let selectedFile = null;
 
   const inputUrl = overlay.querySelector('#input-capture-url');
   const inputTitleHint = overlay.querySelector('#input-capture-title-hint');
@@ -93,7 +118,7 @@ export function createCaptureModal({ onItemSaved }) {
 
   const statusBox = overlay.querySelector('#capture-status-box');
 
-  let activeMode = 'link'; // 'link' | 'note' | 'voice'
+  let activeMode = 'link'; // 'link' | 'note' | 'voice' | 'file'
   let mediaRecorder = null;
   let audioChunks = [];
   let recordInterval = null;
@@ -104,10 +129,12 @@ export function createCaptureModal({ onItemSaved }) {
     tabLink.classList.toggle('active', mode === 'link');
     tabNote.classList.toggle('active', mode === 'note');
     tabVoice.classList.toggle('active', mode === 'voice');
+    tabFile.classList.toggle('active', mode === 'file');
 
     panelLink.style.display = mode === 'link' ? 'block' : 'none';
     panelNote.style.display = mode === 'note' ? 'block' : 'none';
     panelVoice.style.display = mode === 'voice' ? 'block' : 'none';
+    panelFile.style.display = mode === 'file' ? 'block' : 'none';
 
     statusBox.style.display = 'none';
   }
@@ -115,6 +142,25 @@ export function createCaptureModal({ onItemSaved }) {
   tabLink.addEventListener('click', () => switchTab('link'));
   tabNote.addEventListener('click', () => switchTab('note'));
   tabVoice.addEventListener('click', () => switchTab('voice'));
+  tabFile.addEventListener('click', () => switchTab('file'));
+
+  function setSelectedFile(file) {
+    selectedFile = file;
+    fileNameLabel.innerText = file
+      ? `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+      : FILE_PLACEHOLDER;
+  }
+
+  inputFile.addEventListener('change', () => setSelectedFile(inputFile.files[0] || null));
+  ['dragenter', 'dragover'].forEach(evt => fileDropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    fileDropzone.style.borderColor = 'var(--accent-primary, #8b5cf6)';
+  }));
+  ['dragleave', 'drop'].forEach(evt => fileDropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    fileDropzone.style.borderColor = 'var(--border-color)';
+  }));
+  fileDropzone.addEventListener('drop', (e) => setSelectedFile(e.dataTransfer.files[0] || null));
 
   function open(prefilled = {}) {
     if (prefilled.url) {
@@ -139,6 +185,9 @@ export function createCaptureModal({ onItemSaved }) {
     inputNoteTitle.value = '';
     inputNoteBody.value = '';
     inputNoteTags.value = '';
+    inputFile.value = '';
+    inputFileTitle.value = '';
+    setSelectedFile(null);
     statusBox.style.display = 'none';
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
@@ -269,6 +318,41 @@ export function createCaptureModal({ onItemSaved }) {
         };
 
         await insertBrainItem(newItem);
+
+      } else if (activeMode === 'file') {
+        if (!selectedFile) throw new Error('Escolha um arquivo para anexar.');
+        if (selectedFile.size > MAX_FILE_BYTES) throw new Error('O arquivo excede o limite de 10 MB.');
+
+        const mime = selectedFile.type || 'application/octet-stream';
+        const titleHint = inputFileTitle.value.trim();
+
+        if (isPipelineConfigured()) {
+          try {
+            await sendToPipeline({
+              file_base64: await readFileAsBase64(selectedFile),
+              file_mime: mime,
+              file_name: selectedFile.name
+            });
+            showSuccess('✅ Arquivo enviado e analisado pela IA!');
+            return;
+          } catch (pipelineErr) {
+            pipelineWarning = `⚠️ ${pipelineErr.message} Registrado na caixa de entrada sem análise.`;
+          }
+        }
+
+        const isText = mime.startsWith('text/');
+        const sourceType = mime === 'application/pdf' ? 'pdf' : mime.startsWith('audio/') ? 'audio' : 'note';
+        const textContent = isText ? (await selectedFile.text()).trim() : '';
+
+        await insertBrainItem({
+          title: titleHint || selectedFile.name,
+          summary: textContent ? textContent.slice(0, 180) + (textContent.length > 180 ? '...' : '') : `Arquivo anexado: ${selectedFile.name}`,
+          source_type: sourceType,
+          source_url: null,
+          raw_content: textContent || `Arquivo anexado (${mime}): ${selectedFile.name}. Conteúdo não processado.`,
+          key_takeaways: ['Aguardando extração detalhada pelo n8n'],
+          tags: [sourceType, 'arquivo', 'inbox']
+        });
 
       } else if (activeMode === 'voice') {
         const newItem = {

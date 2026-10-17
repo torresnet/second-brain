@@ -30,13 +30,13 @@
             {
               "id": "cfg-gemini-model",
               "name": "geminiModel",
-              "value": "gemini-2.0-flash",
+              "value": "gemini-3.8-flash",
               "type": "string"
             },
             {
               "id": "cfg-embedding-model",
               "name": "embeddingModel",
-              "value": "text-embedding-004",
+              "value": "gemini-embedding-001",
               "type": "string"
             }
           ]
@@ -123,7 +123,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Você é o processador cognitivo de um Segundo Cérebro. Analise a entrada abaixo (Tipo: {{$json.sourceType}} | Conteúdo/URL: {{$json.rawInput}}).\\nSe for um Reels, YouTube ou link de artigo, analise o tema, a mensagem central, tópicos práticos e transcrição/resumo fiel.\\nSe for um áudio ou texto, processe as ideias centrais.\\n\\nIMPORTANTE: Responda ESTRITAMENTE em formato JSON com o seguinte schema:\\n{\\n  \\\"title\\\": \\\"Título curto e intuitivo em PT-BR\\\",\\n  \\\"summary\\\": \\\"Resumo executivo em 2 a 3 parágrafos claros\\\",\\n  \\\"key_takeaways\\\": [\\\"Ponto chave 1\\\", \\\"Ponto chave 2\\\"],\\n  \\\"action_items\\\": [\\\"Ação prática imediata 1\\\", \\\"Ação prática 2\\\"],\\n  \\\"entities\\\": [\\\"Pessoa/Empresa/Tecnologia 1\\\", \\\"Conceito 2\\\"],\\n  \\\"raw_content\\\": \\\"Transcrição ou síntese completa do material\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\", \\\"tag3\\\"]\\n}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Você é o processador cognitivo de um Segundo Cérebro. Analise a entrada abaixo (Tipo: {{$json.sourceType}} | Conteúdo/URL: {{$json.rawInput}}).\\nSe for um Reels, YouTube ou link de artigo, analise o tema, a mensagem central, tópicos práticos e transcrição/resumo fiel.\\nSe for um áudio ou texto, processe as ideias centrais.\\n\\nIMPORTANTE: Responda ESTRITAMENTE em formato JSON com o seguinte schema:\\n{\\n  \\\"title\\\": \\\"Título curto e intuitivo em PT-BR\\\",\\n  \\\"summary\\\": \\\"Resumo executivo em 2 a 3 parágrafos claros\\\",\\n  \\\"key_takeaways\\\": [\\\"Ponto chave 1\\\", \\\"Ponto chave 2\\\"],\\n  \\\"action_items\\\": [\\\"Ação prática imediata 1\\\", \\\"Ação prática 2\\\"],\\n  \\\"entities\\\": [\\\"Pessoa/Empresa/Tecnologia 1\\\", \\\"Conceito 2\\\"],\\n  \\\"raw_content\\\": \\\"Transcrição ou síntese completa do material\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\", \\\"tag3\\\"]\\n}\"\n        }{{ $json.fileBase64 ? \",{\\\"inline_data\\\":{\\\"mime_type\\\":\\\"\" + $json.fileMime + \"\\\",\\\"data\\\":\\\"\" + $json.fileBase64 + \"\\\"}}\" : \"\" }}\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -167,7 +167,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"models/{{ $('Configuração').first().json.embeddingModel }}\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{$json.text_for_embedding.replace(/\"/g, '\\\\\"')}}\"\n      }\n    ]\n  }\n}",
+        "jsonBody": "={{ JSON.stringify({ model: 'models/' + $('Configuração').first().json.embeddingModel, outputDimensionality: 768, content: { parts: [{ text: $json.text_for_embedding }] } }) }}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -176,7 +176,7 @@
       "typeVersion": 4.2,
       "position": [1200, 300],
       "id": "generate-embedding",
-      "name": "Gerar Embedding (text-embedding-004)",
+      "name": "Gerar Embedding",
       "credentials": {
         "httpHeaderAuth": {
           "id": "",
@@ -209,7 +209,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"title\": {{$json.title | toJson}},\n  \"summary\": {{$json.summary | toJson}},\n  \"source_type\": {{$json.source_type | toJson}},\n  \"source_url\": {{$json.source_url | toJson}},\n  \"raw_content\": {{$json.raw_content | toJson}},\n  \"key_takeaways\": {{$json.key_takeaways | toJson}},\n  \"action_items\": {{$json.action_items | toJson}},\n  \"entities\": {{$json.entities | toJson}},\n  \"stage\": {{$json.stage | toJson}},\n  \"tags\": {{$json.tags | toJson}},\n  \"metadata\": {}\n}",
+        "jsonBody": "={\n  \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n  \"summary\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.summary) }},\n  \"source_type\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_type) }},\n  \"source_url\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_url) }},\n  \"raw_content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.raw_content) }},\n  \"key_takeaways\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.key_takeaways) }},\n  \"action_items\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.action_items) }},\n  \"entities\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.entities) }},\n  \"stage\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.stage) }},\n  \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }},\n  \"metadata\": {}\n}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -247,7 +247,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"item_id\": \"{{$json[0].id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{$('Parse Resposta Gemini').first().json.text_for_embedding | toJson}},\n  \"embedding\": {{ $('Gerar Embedding (text-embedding-004)').first().json.embedding.values | toJson }}\n}",
+        "jsonBody": "={\n  \"item_id\": \"{{$json.id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.text_for_embedding) }},\n  \"embedding\": {{ JSON.stringify($('Gerar Embedding').first().json.embedding.values) }}\n}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -269,7 +269,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Item catalogado com sucesso no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json[0].id}}\",\n    \"title\": \"{{$('Parse Resposta Gemini').first().json.title}}\",\n    \"tags\": {{$('Parse Resposta Gemini').first().json.tags | toJson}}\n  }\n}",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Item catalogado com sucesso no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json.id}}\",\n    \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n    \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }}\n  }\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -362,14 +362,14 @@
       "main": [
         [
           {
-            "node": "Gerar Embedding (text-embedding-004)",
+            "node": "Gerar Embedding",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gerar Embedding (text-embedding-004)": {
+    "Gerar Embedding": {
       "main": [
         [
           {

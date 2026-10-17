@@ -10,10 +10,10 @@ Este workflow é o motor de ingestão inteligente que roda no seu servidor Cooli
    - Recebe links (Instagram Reels, YouTube, TikTok, artigos, PDFs), gravações de voz ou anotações rápidas.
 2. **Classificador de Mídia**:
    - Identifica automaticamente o formato e a origem da entrada.
-3. **Analisador Cognitivo (Google Gemini 2.0 Flash)**:
+3. **Analisador Cognitivo (Google Gemini)**:
    - "Lê" e "escuta" o conteúdo.
    - Gera um JSON estruturado com: Título, Resumo Executivo, Pontos-Chave (*key takeaways*), Transcrição/conteúdo bruto e Tags sugeridas.
-4. **Gerador de Embeddings (`text-embedding-004`)**:
+4. **Gerador de Embeddings (`gemini-embedding-001`)**:
    - Cria o vetor de 768 dimensões com base no significado semântico do item.
 5. **Gravação no Supabase (`Second-Brain`)**:
    - Insere o item catalogado na tabela `public.brain_items`.
