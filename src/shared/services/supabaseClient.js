@@ -276,3 +276,12 @@ export async function getPendingIndexCount() {
     .eq('analysis_status', 'pending');
   return error ? 0 : (count || 0);
 }
+
+/**
+ * Ligações entre notas (citam a mesma coisa ou têm assunto parecido).
+ * Devolve [] se a migração ainda não foi aplicada: o grafo continua funcionando só com tags/entidades.
+ */
+export async function getItemLinks() {
+  const { data, error } = await supabase.rpc('brain_item_links');
+  return error ? [] : (data || []);
+}

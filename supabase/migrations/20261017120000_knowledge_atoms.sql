@@ -430,6 +430,82 @@ as $$
   )
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Ligações entre notas (estilo Obsidian): citam a mesma coisa ou têm assunto parecido
+-- ---------------------------------------------------------------------------
+create or replace function public.brain_item_links(
+  p_similar_per_item int default 2,
+  p_min_similarity double precision default 0.62
+)
+returns table (
+  source_id uuid,
+  source_title text,
+  target_id uuid,
+  target_title text,
+  link_type text,
+  weight double precision,
+  labels text[]
+)
+language sql
+stable
+security invoker
+set search_path = public, extensions
+as $$
+  with mentions as (
+    -- o que cada nota cita: átomos (mesma ferramenta/link/código) e entidades
+    select a.item_id, a.canonical_key as k, a.name as label
+    from public.brain_atoms a
+    where a.canonical_key is not null
+    union
+    select i.id, 'ent:' || lower(btrim(e)), btrim(e)
+    from public.brain_items i,
+         jsonb_array_elements_text(case when jsonb_typeof(i.entities) = 'array' then i.entities else '[]'::jsonb end) e
+    where btrim(e) <> ''
+  ),
+  shared as (
+    select m1.item_id as s, m2.item_id as t,
+           array_agg(distinct m1.label) as labels,
+           count(distinct m1.k)::double precision as weight
+    from mentions m1
+    join mentions m2 on m1.k = m2.k and m1.item_id < m2.item_id
+    group by m1.item_id, m2.item_id
+  ),
+  summ as (
+    select distinct on (c.item_id) c.item_id, c.embedding
+    from public.brain_chunks c
+    where c.embedding is not null
+    order by c.item_id, (c.chunk_type = 'summary') desc, c.chunk_index
+  ),
+  sim as (
+    select x.item_id as a, n.item_id as b, 1 - (x.embedding <=> n.embedding) as similarity
+    from summ x
+    cross join lateral (
+      select o.item_id, o.embedding
+      from summ o
+      where o.item_id <> x.item_id
+      order by o.embedding <=> x.embedding
+      limit greatest(p_similar_per_item, 0)
+    ) n
+  ),
+  sim_pairs as (
+    select least(a, b) as s, greatest(a, b) as t, max(similarity) as similarity
+    from sim
+    where similarity >= p_min_similarity
+    group by 1, 2
+  ),
+  links as (
+    select s, t, 'shared'::text as link_type, weight, labels from shared
+    union all
+    select sp.s, sp.t, 'similar', sp.similarity, '{}'::text[]
+    from sim_pairs sp
+    where not exists (select 1 from shared h where h.s = sp.s and h.t = sp.t)
+  )
+  select l.s, si.title, l.t, ti.title, l.link_type, l.weight, l.labels
+  from links l
+  join public.brain_items si on si.id = l.s
+  join public.brain_items ti on ti.id = l.t
+$$;
+
 -- Funções só para usuário autenticado
 revoke execute on function public.search_brain(vector, text, text[], int, text[], text) from public, anon;
 grant execute on function public.search_brain(vector, text, text[], int, text[], text) to authenticated;
@@ -439,3 +515,5 @@ revoke execute on function public.brain_claim_item(uuid) from public, anon;
 grant execute on function public.brain_claim_item(uuid) to authenticated;
 revoke execute on function public.brain_replace_item_knowledge(uuid, jsonb, jsonb, text, text[], text, text) from public, anon;
 grant execute on function public.brain_replace_item_knowledge(uuid, jsonb, jsonb, text, text[], text, text) to authenticated;
+revoke execute on function public.brain_item_links(int, double precision) from public, anon;
+grant execute on function public.brain_item_links(int, double precision) to authenticated;

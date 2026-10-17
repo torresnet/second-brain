@@ -7,6 +7,7 @@ import {
   onAuthChange,
   signOut,
   getBrainItemById,
+  getItemLinks,
   getPendingIndexCount,
   processItemKnowledge,
   processPendingItems
@@ -28,7 +29,8 @@ const state = {
   searchQuery: '',
   items: [],
   stats: { total: 0, favorites: 0, byType: {}, topTags: [] },
-  isLoading: false
+  isLoading: false,
+  itemLinks: []
 };
 
 // Referências DOM
@@ -62,6 +64,11 @@ const detailModal = createItemDetailModal({
     } catch (err) {
       alert('Erro ao excluir item: ' + err.message);
     }
+  },
+  getRelated: (id) => relatedFor(id),
+  onOpenRelated: async (id) => {
+    const item = await getBrainItemById(id).catch(() => null);
+    if (item) detailModal.open(item);
   },
   onReprocess: async (id) => {
     const result = await processItemKnowledge(id);
@@ -121,10 +128,11 @@ async function loadDashboardData() {
 
     state.items = items;
     state.stats = stats;
+    state.itemLinks = await getItemLinks();
 
     renderStatsBar(statsContainer, stats);
     renderItemsGrid();
-    graphView.update(items);
+    graphView.update(items, state.itemLinks);
     refreshIndexBanner();
   } catch (err) {
     itemsGridContainer.innerHTML = `
@@ -135,6 +143,25 @@ async function loadDashboardData() {
   } finally {
     state.isLoading = false;
   }
+}
+
+/**
+ * Notas ligadas a uma nota (nas duas direções), da mais forte para a mais fraca
+ */
+function relatedFor(id) {
+  return state.itemLinks
+    .filter(l => l.source_id === id || l.target_id === id)
+    .map(l => {
+      const otherIsTarget = l.source_id === id;
+      return {
+        id: otherIsTarget ? l.target_id : l.source_id,
+        title: otherIsTarget ? l.target_title : l.source_title,
+        type: l.link_type,
+        labels: l.labels || [],
+        weight: l.weight
+      };
+    })
+    .sort((a, b) => (a.type === b.type ? b.weight - a.weight : a.type === 'shared' ? -1 : 1));
 }
 
 /**
@@ -239,7 +266,7 @@ function switchTab(tab) {
   sectionChat.style.display = tab === 'chat' ? 'block' : 'none';
 
   if (tab === 'graph') {
-    graphView.update(state.items);
+    graphView.update(state.items, state.itemLinks);
   }
   if (tab === 'knowledge') {
     knowledgeView.refresh();

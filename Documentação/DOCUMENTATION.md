@@ -1,8 +1,8 @@
 # 🧠 Segundo Cérebro (Second Brain AI) - Documentação do Projeto
 
-**Versão:** 0.2.1  
+**Versão:** 0.3.0  
 **Status:** Produção ativa em https://2cerebro.scaladigital.com.br com CI/CD Auto-Deploy  
-**Última Atualização:** 14/10/2026  
+**Última Atualização:** 17/10/2026  
 
 ---
 

@@ -1,146 +1,182 @@
 import { APP_CONFIG } from '../shared/constants/config.js';
+import { escapeHtml } from '../shared/utils/markdown.js';
+
+const CLICK_MOVE_TOLERANCE = 5;
+
+const LINK_STYLES = {
+  tag: { color: 'rgba(255,255,255,0.12)', width: 1, dash: [], length: 70 },
+  entity: { color: 'rgba(168,85,247,0.28)', width: 1, dash: [], length: 85 },
+  shared: { color: 'rgba(129,140,248,0.7)', width: 2, dash: [], length: 120 },
+  similar: { color: 'rgba(6,182,212,0.45)', width: 1.2, dash: [5, 5], length: 160 }
+};
 
 export function createGraphView(container, { onSelectNode }) {
   container.innerHTML = `
-    <div style="background: var(--bg-card); backdrop-filter: blur(16px); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; height: calc(100vh - 220px); min-height: 520px; position: relative;">
-      
-      <!-- Barra superior do Grafo -->
-      <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); z-index: 10;">
+    <div class="graph-card">
+      <div class="graph-bar">
         <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="width: 36px; height: 36px; border-radius: 10px; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
-            🕸️
-          </div>
+          <div style="width: 36px; height: 36px; border-radius: 10px; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">🕸️</div>
           <div>
             <h3 style="font-size: 1.05rem; font-weight: 700;">Grafo de Conexões do Conhecimento</h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Visualize como seus Reels, vídeos, tags e entidades se interconectam.</p>
+            <p id="graph-summary" style="font-size: 0.8rem; color: var(--text-muted);">Como suas notas se conectam.</p>
           </div>
         </div>
-
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <span style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;">
-            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #6366f1;"></span> Nota/Mídia
-            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #06b6d4; margin-left: 0.5rem;"></span> Tag/Entidade
-          </span>
-          <button id="graph-reset-btn" class="pill-btn" style="font-size: 0.8rem;">Centralizar</button>
+        <div class="graph-controls">
+          <button id="graph-toggle-hubs" class="pill-btn active" type="button" title="Mostrar tags e entidades">Tags e entidades</button>
+          <button id="graph-toggle-similar" class="pill-btn active" type="button" title="Mostrar notas de assunto parecido">Assunto parecido</button>
+          <button id="graph-reset-btn" class="pill-btn" type="button">Centralizar</button>
         </div>
       </div>
-
-      <!-- Canvas de Renderização -->
-      <canvas id="brain-graph-canvas" style="flex: 1; width: 100%; height: 100%; display: block; cursor: grab;"></canvas>
-
-      <!-- Tooltip Flutuante -->
-      <div id="graph-tooltip" style="position: absolute; display: none; background: rgba(13, 18, 29, 0.95); border: 1px solid var(--border-glow); padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); font-size: 0.85rem; color: #fff; pointer-events: none; z-index: 20; box-shadow: var(--shadow-md);"></div>
+      <div class="graph-legend">
+        <span><i class="dot" style="background:#6366f1"></i> Nota</span>
+        <span><i class="dot small" style="background:#06b6d4"></i> Tag</span>
+        <span><i class="dot small" style="background:#a855f7"></i> Entidade</span>
+        <span><i class="line" style="background:rgba(129,140,248,0.9)"></i> Citam a mesma coisa</span>
+        <span><i class="line dashed"></i> Assunto parecido</span>
+      </div>
+      <canvas id="brain-graph-canvas" style="flex: 1; width: 100%; min-height: 0; display: block; cursor: grab; touch-action: none;"></canvas>
+      <div id="graph-empty" class="graph-empty" style="display: none;"></div>
+      <div id="graph-tooltip" class="graph-tooltip" style="display: none;"></div>
     </div>
   `;
 
   const canvas = container.querySelector('#brain-graph-canvas');
   const ctx = canvas.getContext('2d');
   const tooltip = container.querySelector('#graph-tooltip');
+  const emptyBox = container.querySelector('#graph-empty');
+  const summaryEl = container.querySelector('#graph-summary');
   const resetBtn = container.querySelector('#graph-reset-btn');
+  const hubsBtn = container.querySelector('#graph-toggle-hubs');
+  const similarBtn = container.querySelector('#graph-toggle-similar');
 
+  let items = [];
+  let itemLinks = [];
   let nodes = [];
   let links = [];
   let animationFrameId = null;
   let hoveredNode = null;
   let draggedNode = null;
-
-  let transform = { x: 0, y: 0, k: 1 };
+  let pointerDown = null;
   let isPanning = false;
-  let startPan = { x: 0, y: 0 };
+  let lastPointer = { x: 0, y: 0 };
+  let transform = { x: 0, y: 0, k: 1 };
+  const show = { hubs: true, similar: true };
+  let cssWidth = 0;
+  let cssHeight = 0;
 
+  // O canvas só tem tamanho quando a aba está visível: medimos de novo sempre que isso muda
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * window.devicePixelRatio;
-    canvas.height = rect.height * window.devicePixelRatio;
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    if (rect.width < 2 || rect.height < 2) return false;
+    const dpr = window.devicePixelRatio || 1;
+    const changed = Math.abs(rect.width - cssWidth) > 0.5 || Math.abs(rect.height - cssHeight) > 0.5;
+    cssWidth = rect.width;
+    cssHeight = rect.height;
+    if (changed || canvas.width !== Math.round(rect.width * dpr)) {
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
   }
 
-  window.addEventListener('resize', resizeCanvas);
-  setTimeout(resizeCanvas, 50);
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => {
+      if (resizeCanvas() && nodes.length) ensureLoop();
+    }).observe(canvas);
+  }
+  window.addEventListener('resize', () => resizeCanvas());
 
-  function buildGraphData(items) {
+  // O canvas não entende var(--cor): resolvemos a variável CSS para o valor real
+  function nodeColor(item) {
+    const raw = APP_CONFIG.mediaTypes[item.source_type]?.color || '#6366f1';
+    const match = raw.match(/^var\((--[\w-]+)\)$/);
+    if (!match) return raw;
+    return getComputedStyle(document.documentElement).getPropertyValue(match[1]).trim() || '#6366f1';
+  }
+
+  function buildGraphData() {
+    const placed = () => ({
+      x: cssWidth / 2 + (Math.random() - 0.5) * Math.max(cssWidth * 0.6, 200),
+      y: cssHeight / 2 + (Math.random() - 0.5) * Math.max(cssHeight * 0.6, 200),
+      vx: 0,
+      vy: 0
+    });
     nodes = [];
     links = [];
     const nodeMap = new Map();
+    const hub = (id, label, type, color, radius, near) => {
+      let n = nodeMap.get(id);
+      if (!n) {
+        n = { id, label, type, color, radius, ...placed() };
+        n.x = near.x + (Math.random() - 0.5) * 70;
+        n.y = near.y + (Math.random() - 0.5) * 70;
+        nodes.push(n);
+        nodeMap.set(id, n);
+      }
+      return n;
+    };
 
-    // Adiciona nós das notas
-    items.forEach(item => {
+    for (const item of items) {
+      const title = item.title || 'Sem título';
       const node = {
         id: 'item-' + item.id,
         rawItem: item,
-        label: item.title.length > 22 ? item.title.slice(0, 20) + '...' : item.title,
+        label: title.length > 22 ? title.slice(0, 20) + '…' : title,
+        fullTitle: title,
         type: 'item',
-        color: APP_CONFIG.mediaTypes[item.source_type]?.color || '#6366f1',
+        color: nodeColor(item),
         radius: 12,
-        x: (Math.random() - 0.5) * 400 + (canvas.width / 2 || 400),
-        y: (Math.random() - 0.5) * 300 + (canvas.height / 2 || 250),
-        vx: 0,
-        vy: 0
+        ...placed()
       };
       nodes.push(node);
       nodeMap.set(node.id, node);
 
-      // Conecta com tags
-      (item.tags || []).forEach(tag => {
-        const tagId = 'tag-' + tag.toLowerCase();
-        let tagNode = nodeMap.get(tagId);
-        if (!tagNode) {
-          tagNode = {
-            id: tagId,
-            label: '#' + tag,
-            type: 'tag',
-            color: '#06b6d4',
-            radius: 8,
-            x: node.x + (Math.random() - 0.5) * 60,
-            y: node.y + (Math.random() - 0.5) * 60,
-            vx: 0,
-            vy: 0
-          };
-          nodes.push(tagNode);
-          nodeMap.set(tagId, tagNode);
+      if (show.hubs) {
+        for (const tag of Array.isArray(item.tags) ? item.tags : []) {
+          const t = hub('tag-' + String(tag).toLowerCase(), '#' + tag, 'tag', '#06b6d4', 8, node);
+          links.push({ source: node, target: t, kind: 'tag' });
         }
-        links.push({ source: node, target: tagNode, length: 70 });
-      });
-
-      // Conecta com entidades ([[Wikilinks]])
-      (item.entities || []).forEach(entity => {
-        const entId = 'ent-' + entity.toLowerCase();
-        let entNode = nodeMap.get(entId);
-        if (!entNode) {
-          entNode = {
-            id: entId,
-            label: '[[' + entity + ']]',
-            type: 'entity',
-            color: '#a855f7',
-            radius: 9,
-            x: node.x + (Math.random() - 0.5) * 80,
-            y: node.y + (Math.random() - 0.5) * 80,
-            vx: 0,
-            vy: 0
-          };
-          nodes.push(entNode);
-          nodeMap.set(entId, entNode);
+        for (const entity of Array.isArray(item.entities) ? item.entities : []) {
+          const e = hub('ent-' + String(entity).toLowerCase(), '[[' + entity + ']]', 'entity', '#a855f7', 9, node);
+          links.push({ source: node, target: e, kind: 'entity' });
         }
-        links.push({ source: node, target: entNode, length: 85 });
-      });
-    });
+      }
+    }
 
-    startSimulation();
+    for (const l of itemLinks) {
+      if (l.link_type === 'similar' && !show.similar) continue;
+      const a = nodeMap.get('item-' + l.source_id);
+      const b = nodeMap.get('item-' + l.target_id);
+      if (a && b) links.push({ source: a, target: b, kind: l.link_type, labels: l.labels || [], weight: l.weight });
+    }
+
+    const noteLinks = links.filter(l => l.kind === 'shared' || l.kind === 'similar').length;
+    summaryEl.textContent = items.length
+      ? `${items.length} nota(s) · ${noteLinks} ligação(ões) entre notas. Passe o mouse para destacar, clique para abrir.`
+      : 'Como suas notas se conectam.';
+    emptyBox.style.display = items.length ? 'none' : 'flex';
+    emptyBox.textContent = 'Nenhuma nota para mostrar ainda. Capture conteúdo e as conexões aparecem aqui.';
+  }
+
+  function neighborsOf(node) {
+    const set = new Set([node]);
+    for (const l of links) {
+      if (l.source === node) set.add(l.target);
+      if (l.target === node) set.add(l.source);
+    }
+    return set;
   }
 
   function simulate() {
-    const width = canvas.width / (window.devicePixelRatio || 1);
-    const height = canvas.height / (window.devicePixelRatio || 1);
-    const centerX = width / 2;
-    const centerY = height / 2;
+    const centerX = cssWidth / 2;
+    const centerY = cssHeight / 2;
 
-    // Força gravitacional ao centro
-    nodes.forEach(n => {
+    for (const n of nodes) {
       n.vx += (centerX - n.x) * 0.002;
       n.vy += (centerY - n.y) * 0.002;
-    });
+    }
 
-    // Repulsão entre nós
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i];
@@ -158,175 +194,211 @@ export function createGraphView(container, { onSelectNode }) {
       }
     }
 
-    // Atração pelas arestas
-    links.forEach(link => {
+    for (const link of links) {
       const a = link.source;
       const b = link.target;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = (dist - link.length) * 0.035;
+      const force = (dist - LINK_STYLES[link.kind].length) * 0.035;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       a.vx += fx;
       a.vy += fy;
       b.vx -= fx;
       b.vy -= fy;
-    });
+    }
 
-    // Amortecimento e atualização de posições
-    nodes.forEach(n => {
-      if (n !== draggedNode) {
-        n.vx *= 0.88;
-        n.vy *= 0.88;
-        n.x += n.vx;
-        n.y += n.vy;
-      }
-    });
+    for (const n of nodes) {
+      if (n === draggedNode) continue;
+      n.vx *= 0.88;
+      n.vy *= 0.88;
+      n.x += n.vx;
+      n.y += n.vy;
+    }
   }
 
   function render() {
-    const width = canvas.width / (window.devicePixelRatio || 1);
-    const height = canvas.height / (window.devicePixelRatio || 1);
-
     ctx.save();
-    ctx.clearRect(0, 0, width, height);
-
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
     ctx.translate(transform.x, transform.y);
     ctx.scale(transform.k, transform.k);
 
-    // Desenha Arestas
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 1;
-    links.forEach(link => {
+    const focus = hoveredNode ? neighborsOf(hoveredNode) : null;
+
+    for (const link of links) {
+      const style = LINK_STYLES[link.kind];
+      const lit = !focus || (focus.has(link.source) && focus.has(link.target) && (link.source === hoveredNode || link.target === hoveredNode));
+      ctx.globalAlpha = lit ? 1 : 0.08;
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = style.width + (focus && lit ? 0.8 : 0);
+      ctx.setLineDash(style.dash);
       ctx.beginPath();
       ctx.moveTo(link.source.x, link.source.y);
       ctx.lineTo(link.target.x, link.target.y);
       ctx.stroke();
-    });
+    }
+    ctx.setLineDash([]);
 
-    // Desenha Nós
-    nodes.forEach(n => {
+    for (const n of nodes) {
       const isHovered = n === hoveredNode;
-
-      // Glow effect
-      if (isHovered) {
-        ctx.shadowColor = n.color;
-        ctx.shadowBlur = 15;
-      } else {
-        ctx.shadowBlur = 0;
-      }
+      ctx.globalAlpha = !focus || focus.has(n) ? 1 : 0.18;
+      ctx.shadowColor = n.color;
+      ctx.shadowBlur = isHovered ? 15 : 0;
 
       ctx.beginPath();
       ctx.arc(n.x, n.y, isHovered ? n.radius + 3 : n.radius, 0, Math.PI * 2);
       ctx.fillStyle = n.color;
       ctx.fill();
-
       ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Label do nó
       ctx.shadowBlur = 0;
-      ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
-      ctx.font = isHovered ? 'bold 11px Inter' : '10px Inter';
+      ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
+      ctx.font = isHovered ? 'bold 11px Inter, sans-serif' : '10px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(n.label, n.x, n.y + n.radius + 13);
-    });
-
+    }
     ctx.restore();
   }
 
   function loop() {
+    // Aba oculta: pausa a animação (retoma em ensureLoop quando voltar a ter tamanho)
+    if (!canvas.offsetParent || !resizeCanvas()) {
+      animationFrameId = null;
+      return;
+    }
     simulate();
     render();
     animationFrameId = requestAnimationFrame(loop);
   }
 
-  function startSimulation() {
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    loop();
+  function ensureLoop() {
+    if (animationFrameId === null) animationFrameId = requestAnimationFrame(loop);
   }
 
-  // Interações de Mouse e Toque
-  function getMousePos(e) {
+  function pointerPos(e) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
-    const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
     return {
-      x: (clientX - rect.left - transform.x) / transform.k,
-      y: (clientY - rect.top - transform.y) / transform.k
+      sx: e.clientX - rect.left,
+      sy: e.clientY - rect.top,
+      x: (e.clientX - rect.left - transform.x) / transform.k,
+      y: (e.clientY - rect.top - transform.y) / transform.k
     };
   }
 
-  canvas.addEventListener('mousemove', (e) => {
-    const pos = getMousePos(e);
+  function nodeAt(pos) {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      const dx = n.x - pos.x;
+      const dy = n.y - pos.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= n.radius + 5) return n;
+    }
+    return null;
+  }
+
+  function describe(node) {
+    if (node.type !== 'item') return `<strong>${escapeHtml(node.label)}</strong><br><span class="graph-tip-sub">${node.type === 'tag' ? 'TAG' : 'ENTIDADE'}</span>`;
+    const related = links.filter(l => (l.kind === 'shared' || l.kind === 'similar') && (l.source === node || l.target === node));
+    const lines = related.slice(0, 4).map(l => {
+      const other = l.source === node ? l.target : l.source;
+      const why = l.kind === 'shared' ? `cita ${escapeHtml((l.labels || []).slice(0, 3).join(', ') || 'o mesmo conteúdo')}` : 'assunto parecido';
+      return `<div class="graph-tip-rel">↔ ${escapeHtml(other.fullTitle)} <span>(${why})</span></div>`;
+    });
+    return `<strong>${escapeHtml(node.fullTitle)}</strong><br><span class="graph-tip-sub">NOTA · ${related.length} ligação(ões) com outras notas</span>${lines.join('')}`;
+  }
+
+  canvas.addEventListener('pointermove', (e) => {
+    const pos = pointerPos(e);
     if (draggedNode) {
       draggedNode.x = pos.x;
       draggedNode.y = pos.y;
       return;
     }
-
     if (isPanning) {
-      transform.x += e.movementX;
-      transform.y += e.movementY;
+      transform.x += e.clientX - lastPointer.x;
+      transform.y += e.clientY - lastPointer.y;
+      lastPointer = { x: e.clientX, y: e.clientY };
       return;
     }
-
-    // Hit-testing
-    hoveredNode = nodes.find(n => {
-      const dx = n.x - pos.x;
-      const dy = n.y - pos.y;
-      return Math.sqrt(dx * dx + dy * dy) <= n.radius + 4;
-    });
-
+    hoveredNode = nodeAt(pos);
     if (hoveredNode) {
       canvas.style.cursor = hoveredNode.type === 'item' ? 'pointer' : 'grab';
       tooltip.style.display = 'block';
-      tooltip.style.left = (e.clientX - canvas.getBoundingClientRect().left + 15) + 'px';
-      tooltip.style.top = (e.clientY - canvas.getBoundingClientRect().top + 15) + 'px';
-      tooltip.innerHTML = `<strong>${hoveredNode.label}</strong><br><span style="color: var(--text-muted); font-size: 0.75rem;">${hoveredNode.type.toUpperCase()}</span>`;
+      tooltip.style.left = Math.min(pos.sx + 15, Math.max(cssWidth - 260, 0)) + 'px';
+      tooltip.style.top = (pos.sy + 70) + 'px';
+      tooltip.innerHTML = describe(hoveredNode);
     } else {
       canvas.style.cursor = 'grab';
       tooltip.style.display = 'none';
     }
   });
 
-  canvas.addEventListener('mousedown', (e) => {
-    const pos = getMousePos(e);
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture?.(e.pointerId);
+    const pos = pointerPos(e);
+    hoveredNode = nodeAt(pos);
+    pointerDown = { x: e.clientX, y: e.clientY, node: hoveredNode };
     if (hoveredNode) {
       draggedNode = hoveredNode;
       canvas.style.cursor = 'grabbing';
     } else {
       isPanning = true;
-      startPan = { x: e.clientX, y: e.clientY };
+      lastPointer = { x: e.clientX, y: e.clientY };
       canvas.style.cursor = 'move';
     }
   });
 
-  window.addEventListener('mouseup', () => {
-    if (draggedNode && hoveredNode && hoveredNode.type === 'item' && onSelectNode) {
-      // Se clicou sem arrastar muito, abre o item
-      onSelectNode(hoveredNode.rawItem);
+  function endPointer(e) {
+    if (pointerDown?.node?.type === 'item' && onSelectNode) {
+      const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+      if (moved <= CLICK_MOVE_TOLERANCE) onSelectNode(pointerDown.node.rawItem);
     }
+    pointerDown = null;
     draggedNode = null;
     isPanning = false;
     canvas.style.cursor = 'grab';
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', () => { pointerDown = null; draggedNode = null; isPanning = false; });
+  canvas.addEventListener('pointerleave', () => {
+    if (!draggedNode && !isPanning) {
+      hoveredNode = null;
+      tooltip.style.display = 'none';
+    }
   });
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    transform.k = Math.max(0.4, Math.min(3, transform.k * zoomFactor));
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    transform.k = Math.max(0.4, Math.min(3, transform.k * factor));
   }, { passive: false });
 
-  resetBtn.addEventListener('click', () => {
-    transform = { x: 0, y: 0, k: 1 };
+  resetBtn.addEventListener('click', () => { transform = { x: 0, y: 0, k: 1 }; });
+
+  function rebuild() {
+    resizeCanvas();
+    buildGraphData();
+    ensureLoop();
+  }
+
+  hubsBtn.addEventListener('click', () => {
+    show.hubs = !show.hubs;
+    hubsBtn.classList.toggle('active', show.hubs);
+    rebuild();
+  });
+  similarBtn.addEventListener('click', () => {
+    show.similar = !show.similar;
+    similarBtn.classList.toggle('active', show.similar);
+    rebuild();
   });
 
   return {
-    update: (items) => {
-      buildGraphData(items);
+    update: (nextItems, nextLinks) => {
+      items = Array.isArray(nextItems) ? nextItems : [];
+      if (Array.isArray(nextLinks)) itemLinks = nextLinks;
+      rebuild();
     }
   };
 }

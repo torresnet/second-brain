@@ -11,6 +11,7 @@ Tudo o que o Supabase precisa para a memória externa fiel: banco, busca híbrid
 | Átomos | `brain_atoms` | Cada coisa dentro do conteúdo: ferramenta, repositório, link, código, comando, prompt, passo a passo, ideia, pessoa... (tipo aberto). Guarda o conteúdo literal, a explicação em PT-BR, onde é usado, as perguntas que responde e o que existe dentro do link varrido. |
 | Trechos de busca | `brain_chunks` | Vários trechos por item (resumo, conteúdo, cada átomo), com vetor (768) e índice de texto. |
 | Busca | RPC `search_brain` | Fusão de significado (vetor) + texto sem acento/plural + nome exato (RRF). |
+| Ligações entre notas | RPC `brain_item_links` | Notas que citam a mesma coisa (ferramenta, link, entidade) e notas de assunto parecido (vetor). Alimenta o grafo e "Notas relacionadas". |
 | Gravação | RPC `brain_replace_item_knowledge` | Troca átomos e trechos de um item numa única transação (tudo ou nada). |
 
 Funções (Edge Functions, Deno):
@@ -37,6 +38,14 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
    ```
 4. **n8n:** reimporte `n8n/second_brain_workflow.json` (só o nó novo "Enriquecer Conhecimento" mudou; as credenciais continuam as mesmas).
 5. **App:** publique o frontend (push na `main`). Ao entrar, clique em **Indexar agora** para processar os itens antigos.
+
+## Perguntas frequentes
+
+**Preciso clicar em "Indexar agora" sempre?** Não. Notas novas são indexadas automaticamente pelo n8n. O botão serve para as notas antigas (anteriores à v0.3) e reaparece só se alguma indexação falhar e a nota ficar pendente. Notas com "Falha na indexação" são refeitas pelo botão "Tentar de novo" dentro da nota.
+
+**Apagar uma nota apaga o resto?** Sim: átomos, conteúdo lido dos links, trechos de busca e vetores da nota são apagados em cascata. Outras notas não são afetadas (cada nota tem a sua cópia dos itens). Confira com a consulta do passo 1 que `brain_chunks.item_id` mostra `ON DELETE CASCADE`; sem isso podem sobrar trechos soltos (invisíveis nas buscas, mas ocupando espaço).
+
+**Uma indexação incompleta apaga o que já estava bom?** Não. Se a nota já estava indexada e o reprocessamento terminar incompleto, o conhecimento anterior é mantido.
 
 ## Testes locais
 

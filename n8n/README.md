@@ -18,7 +18,11 @@ Este workflow é o motor de ingestão inteligente que roda no seu servidor Cooli
 5. **Gravação no Supabase (`Second-Brain`)**:
    - Insere o item catalogado na tabela `public.brain_items`.
    - Insere o vetor semântico na tabela `public.brain_chunks`.
-6. **Resposta Imediata**:
+6. **Enriquecimento de Conhecimento (`Enriquecer Conhecimento`, v0.3)**:
+   - Chama a função `brain-process` do Supabase para extrair ferramentas, links, códigos e ideias da nota, varrer os links citados e refazer o índice de busca.
+   - Se falhar (Gemini fora do ar, tempo esgotado), a captura **não se perde**: a nota fica "pendente" e o app oferece "Indexar agora" / "Tentar de novo".
+   - Usa a credencial `Supabase Anon Key` (a mesma dos outros nós) e o token do usuário vindo do webhook. A chave do Gemini dessa etapa fica nas secrets do Supabase (`GEMINI_API_KEY`), não no n8n.
+7. **Resposta Imediata**:
    - Devolve confirmação em JSON para o PWA ou Telegram informando o sucesso da catalogação.
 
 ---
@@ -34,6 +38,7 @@ Este workflow é o motor de ingestão inteligente que roda no seu servidor Cooli
    - `Media Fetcher Key`: Name = `X-Api-Key`, Value = o `FETCHER_API_KEY` do serviço [`media-fetcher/`](../media-fetcher/README.md). Nó: *Media Fetcher*. No nó *Configuração*, ajuste `mediaFetcherUrl`.
    - O dono do cérebro é definido no banco (`supabase/auth_rls.sql`); o n8n não precisa do UUID.
 5. Clique em **Save** e ative o switch para **Active**.
+   - Atualizando da v0.2: basta reimportar o arquivo; só o nó "Enriquecer Conhecimento" é novo. Antes, publique as funções do Supabase (veja [`supabase/README.md`](../supabase/README.md)).
 6. Copie a URL do Webhook de Produção gerada no primeiro nó.
 
 ---

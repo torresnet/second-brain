@@ -17,6 +17,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Aba **Conhecimento** (catálogo de ferramentas, links, códigos e ideias, com filtro e botão de copiar) e seção "Conhecimento extraído" na ficha da nota.
 - Testes automatizados (`npm test`): migração e busca em Postgres real (PGlite), extração, SSRF, processamento, consulta e Markdown seguro; script `scripts/eval-recall.mjs` para medir a recuperação com os dados reais.
 
+- **Ligações entre notas (estilo Obsidian):** função `brain_item_links` liga notas que citam a mesma ferramenta/link/entidade (linha cheia) e notas de assunto parecido por vetor (linha tracejada). Aparecem no grafo e na seção "Notas relacionadas" da ficha (clicável, com o motivo da ligação).
+
+### Corrigido
+- **Grafo de Conexões vazio:** o canvas era medido com a aba oculta (tamanho 0). Agora é remedido ao exibir/redimensionar, pausa quando oculto, usa as cores reais das notas (variáveis CSS não funcionam no canvas), destaca vizinhos ao passar o mouse, funciona com toque e escapa o texto do tooltip.
+
 ### Alterado
 - n8n: novo nó "Enriquecer Conhecimento" ao final da ingestão (falha dele não perde a captura).
 

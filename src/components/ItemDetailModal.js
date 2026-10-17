@@ -10,7 +10,7 @@ const ANALYSIS_LABELS = {
   failed: 'Falha na indexação'
 };
 
-export function createItemDetailModal({ onDelete, onReprocess }) {
+export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpenRelated }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'item-detail-modal';
@@ -82,6 +82,12 @@ export function createItemDetailModal({ onDelete, onReprocess }) {
           <div id="modal-raw-content" style="max-height: 200px; overflow-y: auto; font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; font-family: inherit; white-space: pre-wrap;"></div>
         </div>
 
+        <!-- Notas relacionadas (backlinks, como no Obsidian) -->
+        <div id="modal-related-section" style="display: none;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--accent-indigo); margin-bottom: 0.5rem;">🔗 Notas relacionadas</div>
+          <div id="modal-related-list" class="related-list"></div>
+        </div>
+
         <!-- Conhecimento extraído (ferramentas, links, códigos, ideias...) -->
         <div id="modal-atoms-section" style="display: none;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
@@ -137,6 +143,8 @@ export function createItemDetailModal({ onDelete, onReprocess }) {
   const actionsSection = overlay.querySelector('#modal-actions-section');
   const actionsList = overlay.querySelector('#modal-actions-list');
 
+  const relatedSection = overlay.querySelector('#modal-related-section');
+  const relatedList = overlay.querySelector('#modal-related-list');
   const atomsSection = overlay.querySelector('#modal-atoms-section');
   const atomsList = overlay.querySelector('#modal-atoms-list');
   const atomsCount = overlay.querySelector('#modal-atoms-count');
@@ -217,9 +225,26 @@ export function createItemDetailModal({ onDelete, onReprocess }) {
       tagsContainer.innerHTML = '';
     }
 
+    renderRelated(item);
     renderAtoms(item);
     overlay.classList.add('active');
   }
+
+  function renderRelated(item) {
+    const related = getRelated ? getRelated(item.id) : [];
+    relatedSection.style.display = related.length ? 'block' : 'none';
+    relatedList.innerHTML = related
+      .map(r => `<button type="button" class="related-item" data-id="${escapeHtml(r.id)}">
+          <strong>${escapeHtml(r.title || 'Sem título')}</strong>
+          <span>${r.type === 'shared' ? 'ambas citam: ' + escapeHtml((r.labels || []).slice(0, 4).join(', ') || 'o mesmo conteúdo') : 'assunto parecido'}</span>
+        </button>`)
+      .join('');
+  }
+
+  relatedList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.related-item');
+    if (btn && onOpenRelated) onOpenRelated(btn.dataset.id);
+  });
 
   async function renderAtoms(item) {
     const hasStatus = typeof item.analysis_status === 'string';
