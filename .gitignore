@@ -30,3 +30,6 @@ coolify_private_key.txt
 .env
 .env.local
 .env.*.local
+
+# Supabase CLI (estado local)
+supabase/.temp/

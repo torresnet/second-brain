@@ -8,12 +8,13 @@ Um ecossistema pessoal inteligente de captura, organização cognitiva e recuper
 
 - **Banco de Dados & RAG:** Supabase com extensão `pgvector` e índice acelerador HNSW.
 - **Ingestão Multimodal:** n8n (no Coolify) orquestrando chamadas ao **Google Gemini 2.0 Flash** e embeddings com `text-embedding-004`.
+- **Memória externa fiel (v0.3):** átomos de conhecimento (ferramentas, links, códigos, ideias), varredura dos links citados e consulta com respostas concisas em PT-BR via Edge Functions do Supabase. Veja `supabase/README.md`.
 - **Frontend / PWA:** Vanilla JS + CSS Glassmorphism + Vite com suporte a **Web Share Target API** (compartilhar direto do celular), **Grafo de Conexões interativo**, estágios do **Jardim Digital** (🌱, 🌿, 🌳), **Ações Práticas (GTD)** e exportador para **Obsidian (.md)**.
 - **Skill IA:** Habilidade nativa para Gemini CLI / Antigravity em `.agents/skills/second-brain/SKILL.md`.
 
 ---
 
-## 🚀 Como Executar Localmente
+## 🚀 Como Executar Localmente (testes: `npm test`)
 
 ```bash
 # 1. Instalar dependências

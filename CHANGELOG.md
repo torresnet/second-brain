@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-10-17
+
+### Adicionado
+- **Memória externa fiel:** cada captura passa a ser decomposta em "átomos" de conhecimento (ferramentas, repositórios, links, códigos, comandos, prompts, passos, ideias, pessoas...; tipo aberto) com conteúdo literal, explicação em PT-BR, onde é usado e as perguntas que cada um responde (`brain_atoms`).
+- Varredura dos links citados (1 nível, até 5 por item, GitHub via API): o app guarda "o que tem dentro" de cada link, com motivo claro quando não é possível ler. Proteção contra SSRF.
+- Cobertura garantida por regra: todo link e bloco de código do texto vira átomo mesmo que a IA esqueça; URLs que a IA inventa são marcadas como "inferidas".
+- Busca híbrida (`search_brain`): significado + texto sem acento/plural + nome exato; vários trechos por item.
+- Função `brain-ask`: o chat agora entende a pergunta (inclusive continuações), responde de forma concisa em PT-BR só com o que está salvo, cita as notas e remove links que não estão no acervo. Funciona em modo reduzido se a IA estiver fora.
+- Função `brain-process` e botões "Indexar agora" / "Reprocessar" para indexar o acervo existente.
+- Aba **Conhecimento** (catálogo de ferramentas, links, códigos e ideias, com filtro e botão de copiar) e seção "Conhecimento extraído" na ficha da nota.
+- Testes automatizados (`npm test`): migração e busca em Postgres real (PGlite), extração, SSRF, processamento, consulta e Markdown seguro; script `scripts/eval-recall.mjs` para medir a recuperação com os dados reais.
+
+### Alterado
+- n8n: novo nó "Enriquecer Conhecimento" ao final da ingestão (falha dele não perde a captura).
+
 ## [Não lançado]
 
 ### Adicionado

@@ -32,6 +32,28 @@ Ele incorpora as melhores práticas da comunidade open-source:
 
 ---
 
+## 🧩 Conhecimento extraído (v0.3)
+
+Além de `brain_items`, cada item é decomposto em **átomos** na tabela `public.brain_atoms`
+(`kind` aberto: ferramenta, repositorio, link, codigo, comando, prompt, passo-a-passo, ideia, pessoa...).
+Campos: `name`, `content` (literal: código/comando/prompt), `explanation` (PT-BR), `use_for` (onde é usado),
+`url`, `inferred` (link não visto no material), `contents_summary` (o que tem dentro do link), `questions`.
+
+Para perguntas por objetivo, nome, capacidade ou lembrança vaga, prefira a busca híbrida
+`search_brain(query_embedding, query_text, keywords, match_count, filter_kinds, filter_category)` ou a função
+`brain-ask` (resposta pronta, em PT-BR, só com o que está salvo). Consulta direta por texto:
+
+```sql
+select a.kind, a.name, a.url, a.explanation, a.use_for, a.content, i.title
+from public.brain_atoms a join public.brain_items i on i.id = a.item_id
+where a.fts @@ websearch_to_tsquery('portuguese', public.brain_unaccent('<termo>'))
+   or public.brain_unaccent(lower(a.name)) like '%<termo sem acento>%'
+order by a.created_at desc limit 10;
+```
+
+Regras: responda só com o que está salvo, em PT-BR e de forma concisa; copie URLs exatamente; avise quando
+`inferred` for verdadeiro; se não houver nada, diga que não encontrou.
+
 ## 🔍 Como Executar Consultas
 
 Quando o usuário pedir para consultar o Segundo Cérebro:

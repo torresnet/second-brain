@@ -1,0 +1,8 @@
+[
+  { "question": "O que você tem salvo aqui? Me dê um panorama.", "must_include": [] },
+  { "question": "Quais ferramentas eu salvei?", "must_include": [] },
+  { "question": "Tenho algum código para editar imagens?", "must_include": [] },
+  { "question": "Quero montar um sistema de cadastro de clientes. O que eu já tenho que ajuda?", "must_include": [] },
+  { "question": "Quero automatizar atendimento no WhatsApp para vender mais. O que tenho salvo?", "must_include": [] },
+  { "question": "Qual era aquele vídeo que falava de funil?", "must_include": [] }
+]

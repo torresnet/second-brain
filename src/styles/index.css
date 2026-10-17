@@ -745,3 +745,254 @@ h1, h2, h3, h4, .brand-font {
   border-color: var(--accent-cyan);
   color: var(--text-primary);
 }
+
+/* ==========================================================================
+   v0.3 - Conhecimento extraído, chat com fontes, indexação
+   ========================================================================== */
+.chat-clear-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.chat-suggestions {
+  padding: 0.75rem 1.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  align-items: center;
+}
+
+.chat-suggestions > span {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.chat-suggestions .pill-btn {
+  white-space: nowrap;
+}
+
+.message-ai p { margin: 0 0 0.6rem; }
+.message-ai p:last-child { margin-bottom: 0; }
+.message-ai ul,
+.message-ai ol { margin: 0 0 0.6rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.message-ai a { color: var(--accent-cyan); word-break: break-all; }
+
+.chat-typing { color: var(--text-muted); font-style: italic; }
+.chat-error { color: #f87171; }
+
+.chat-notice {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: #fbbf24;
+}
+
+.chat-sources {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chat-sources-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  text-align: left;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.source-card:hover,
+.source-card:focus-visible {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.source-atoms { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+.source-atom {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: rgba(99, 102, 241, 0.14);
+  border-radius: var(--radius-full);
+  padding: 0.1rem 0.5rem;
+}
+
+/* Blocos de código (chat e catálogo) */
+.md-code {
+  margin: 0.4rem 0 0.7rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.md-code-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.md-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.md-copy-btn:hover,
+.md-copy-btn:focus-visible { color: var(--text-primary); background: rgba(255, 255, 255, 0.16); }
+
+.md-code pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+  max-height: 340px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.md-inline-code {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Catálogo de conhecimento */
+.knowledge-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.knowledge-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+}
+
+.knowledge-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+}
+
+.atom-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.atom-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.atom-head h4 { font-size: 0.98rem; color: var(--text-primary); word-break: break-word; }
+
+.atom-kind {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.16);
+  border-radius: var(--radius-full);
+  padding: 0.12rem 0.55rem;
+}
+
+.atom-chip {
+  font-size: 0.68rem;
+  border-radius: var(--radius-full);
+  padding: 0.1rem 0.5rem;
+}
+
+.atom-chip-ok { color: #34d399; background: rgba(16, 185, 129, 0.14); }
+.atom-chip-warn { color: #fbbf24; background: rgba(245, 158, 11, 0.14); }
+
+.atom-url {
+  color: var(--accent-cyan);
+  word-break: break-all;
+  font-size: 0.82rem;
+}
+
+.atom-usefor strong,
+.atom-inside strong { color: var(--text-primary); font-weight: 600; }
+
+.atom-source {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  text-align: left;
+}
+
+.atom-source:hover,
+.atom-source:focus-visible { color: var(--text-primary); }
+
+/* Aviso de itens aguardando indexação */
+.indexing-banner {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.08);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.indexing-banner .btn-primary { padding: 0.4rem 0.9rem; font-size: 0.82rem; }
+
+@media (max-width: 640px) {
+  .knowledge-list { grid-template-columns: 1fr; }
+  .message-bubble { max-width: 94%; }
+}

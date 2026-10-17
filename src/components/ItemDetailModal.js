@@ -1,6 +1,16 @@
 import { formatDateBR, getMediaBadge, getStageBadge, downloadMarkdownFile, copyToClipboard } from '../shared/utils/formatters.js';
+import { getItemAtoms } from '../shared/services/supabaseClient.js';
+import { atomCardHtml } from './KnowledgeView.js';
 
-export function createItemDetailModal({ onDelete }) {
+const ANALYSIS_LABELS = {
+  pending: 'Aguardando indexação avançada',
+  processing: 'Indexando…',
+  done: 'Indexada',
+  partial: 'Indexada parcialmente',
+  failed: 'Falha na indexação'
+};
+
+export function createItemDetailModal({ onDelete, onReprocess }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'item-detail-modal';
@@ -72,6 +82,20 @@ export function createItemDetailModal({ onDelete }) {
           <div id="modal-raw-content" style="max-height: 200px; overflow-y: auto; font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; font-family: inherit; white-space: pre-wrap;"></div>
         </div>
 
+        <!-- Conhecimento extraído (ferramentas, links, códigos, ideias...) -->
+        <div id="modal-atoms-section" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--accent-cyan);">
+              🧩 Conhecimento extraído <span id="modal-atoms-count" style="color: var(--text-muted); font-weight: 400;"></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span id="modal-analysis-status" style="font-size: 0.78rem; color: var(--text-muted);"></span>
+              <button id="modal-reprocess-btn" class="pill-btn" type="button">Reprocessar</button>
+            </div>
+          </div>
+          <div id="modal-atoms-list" class="knowledge-list"></div>
+        </div>
+
         <!-- Tags -->
         <div id="modal-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
       </div>
@@ -113,6 +137,12 @@ export function createItemDetailModal({ onDelete }) {
   const actionsSection = overlay.querySelector('#modal-actions-section');
   const actionsList = overlay.querySelector('#modal-actions-list');
 
+  const atomsSection = overlay.querySelector('#modal-atoms-section');
+  const atomsList = overlay.querySelector('#modal-atoms-list');
+  const atomsCount = overlay.querySelector('#modal-atoms-count');
+  const analysisStatusEl = overlay.querySelector('#modal-analysis-status');
+  const reprocessBtn = overlay.querySelector('#modal-reprocess-btn');
+
   const rawContentEl = overlay.querySelector('#modal-raw-content');
   const tagsContainer = overlay.querySelector('#modal-tags-container');
 
@@ -136,7 +166,7 @@ export function createItemDetailModal({ onDelete }) {
     dateEl.innerText = formatDateBR(item.created_at);
     titleEl.innerText = item.title;
 
-    if (item.source_url) {
+    if (item.source_url && /^https?:\/\//i.test(item.source_url)) {
       sourceLink.href = item.source_url;
       sourceLink.innerText = `🔗 ${item.source_url.slice(0, 60)}...`;
       linkContainer.style.display = 'block';
@@ -187,7 +217,32 @@ export function createItemDetailModal({ onDelete }) {
       tagsContainer.innerHTML = '';
     }
 
+    renderAtoms(item);
     overlay.classList.add('active');
+  }
+
+  async function renderAtoms(item) {
+    const hasStatus = typeof item.analysis_status === 'string';
+    atomsSection.style.display = hasStatus ? 'block' : 'none';
+    atomsList.innerHTML = '';
+    atomsCount.innerText = '';
+    if (!hasStatus) return;
+
+    analysisStatusEl.innerText = ANALYSIS_LABELS[item.analysis_status] || '';
+    reprocessBtn.style.display = onReprocess ? '' : 'none';
+    reprocessBtn.disabled = false;
+    reprocessBtn.innerText = item.analysis_status === 'done' ? 'Reprocessar' : 'Indexar agora';
+
+    try {
+      const atoms = await getItemAtoms(item.id);
+      if (!currentItem || currentItem.id !== item.id) return;
+      atomsCount.innerText = `(${atoms.length})`;
+      atomsList.innerHTML = atoms.length
+        ? atoms.map(a => atomCardHtml(a, { showSource: false })).join('')
+        : '<div class="knowledge-empty">Nenhum item extraído ainda.</div>';
+    } catch (err) {
+      atomsList.innerHTML = `<div class="knowledge-empty chat-error">${escapeHtml(err.message)}</div>`;
+    }
   }
 
   function close() {
@@ -214,6 +269,35 @@ export function createItemDetailModal({ onDelete }) {
   downloadMdBtn.addEventListener('click', () => {
     if (currentItem) {
       downloadMarkdownFile(currentItem);
+    }
+  });
+
+  reprocessBtn.addEventListener('click', async () => {
+    if (!currentItem || !onReprocess) return;
+    const item = currentItem;
+    reprocessBtn.disabled = true;
+    reprocessBtn.innerText = 'Processando…';
+    analysisStatusEl.innerText = 'Isso pode levar até 1 minuto.';
+    try {
+      const updated = await onReprocess(item.id);
+      if (updated && currentItem && currentItem.id === item.id) {
+        currentItem = updated;
+        renderAtoms(updated);
+      }
+    } catch (err) {
+      analysisStatusEl.innerText = err.message;
+      reprocessBtn.disabled = false;
+      reprocessBtn.innerText = 'Tentar de novo';
+    }
+  });
+
+  atomsList.addEventListener('click', async (e) => {
+    const copyBtn = e.target.closest('.md-copy-btn');
+    if (!copyBtn) return;
+    const code = copyBtn.closest('.md-code')?.querySelector('code')?.textContent || '';
+    if (await copyToClipboard(code)) {
+      copyBtn.innerText = 'Copiado ✓';
+      setTimeout(() => { copyBtn.innerText = 'Copiar'; }, 1800);
     }
   });
 

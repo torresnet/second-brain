@@ -5,7 +5,11 @@ import {
   deleteBrainItem,
   getSession,
   onAuthChange,
-  signOut
+  signOut,
+  getBrainItemById,
+  getPendingIndexCount,
+  processItemKnowledge,
+  processPendingItems
 } from './shared/services/supabaseClient.js';
 import { createLoginScreen } from './components/LoginScreen.js';
 import { createBrainItemCard } from './components/BrainItemCard.js';
@@ -14,11 +18,12 @@ import { createItemDetailModal } from './components/ItemDetailModal.js';
 import { createCaptureModal } from './components/CaptureModal.js';
 import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
+import { createKnowledgeView } from './components/KnowledgeView.js';
 import { takeSharedFile } from './shared/services/captureService.js';
 
 // Estado da Aplicação
 const state = {
-  currentTab: 'feed', // 'feed' | 'graph' | 'chat'
+  currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat'
   filterType: 'all',
   searchQuery: '',
   items: [],
@@ -28,9 +33,11 @@ const state = {
 
 // Referências DOM
 const sectionFeed = document.getElementById('section-feed');
+const sectionKnowledge = document.getElementById('section-knowledge');
 const sectionGraph = document.getElementById('section-graph');
 const sectionChat = document.getElementById('section-chat');
 const navBtnFeed = document.getElementById('nav-btn-feed');
+const navBtnKnowledge = document.getElementById('nav-btn-knowledge');
 const navBtnGraph = document.getElementById('nav-btn-graph');
 const navBtnChat = document.getElementById('nav-btn-chat');
 const headerCaptureBtn = document.getElementById('header-capture-btn');
@@ -42,6 +49,8 @@ const emptyStateContainer = document.getElementById('empty-state-container');
 const searchInput = document.getElementById('feed-search-input');
 const mediaFiltersContainer = document.getElementById('media-filters-container');
 const chatMountPoint = document.getElementById('chat-mount-point');
+const knowledgeMountPoint = document.getElementById('knowledge-mount-point');
+const indexingBanner = document.getElementById('indexing-banner');
 const graphMountPoint = document.getElementById('graph-mount-point');
 
 // Inicialização dos Modais
@@ -53,6 +62,17 @@ const detailModal = createItemDetailModal({
     } catch (err) {
       alert('Erro ao excluir item: ' + err.message);
     }
+  },
+  onReprocess: async (id) => {
+    const result = await processItemKnowledge(id);
+    const outcome = result?.results?.[0] ?? result;
+    if (outcome?.status === 'not_found') throw new Error('A nota não existe mais.');
+    if (outcome?.status === 'busy') throw new Error('Este item já está sendo processado. Aguarde alguns minutos.');
+    if (outcome?.status === 'failed') {
+      throw new Error(outcome.warnings?.[0] || 'A indexação falhou. Tente novamente em instantes.');
+    }
+    refreshIndexBanner();
+    return getBrainItemById(id);
   }
 });
 
@@ -67,6 +87,11 @@ createBrainChat(chatMountPoint, {
   onOpenItem: (item) => {
     detailModal.open(item);
   }
+});
+
+// Catálogo de conhecimento extraído (ferramentas, links, códigos, ideias...)
+const knowledgeView = createKnowledgeView(knowledgeMountPoint, {
+  onOpenItem: (item) => detailModal.open(item)
 });
 
 // Inicialização do Grafo de Conexões (Inspirado em NoteDiscovery e SamurAIGPT)
@@ -100,6 +125,7 @@ async function loadDashboardData() {
     renderStatsBar(statsContainer, stats);
     renderItemsGrid();
     graphView.update(items);
+    refreshIndexBanner();
   } catch (err) {
     itemsGridContainer.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #f87171;">
@@ -108,6 +134,60 @@ async function loadDashboardData() {
     `;
   } finally {
     state.isLoading = false;
+  }
+}
+
+/**
+ * Aviso (e ação) para indexar itens antigos que ainda não têm o conhecimento extraído
+ */
+let isIndexing = false;
+
+async function refreshIndexBanner() {
+  if (isIndexing) return;
+  const pending = await getPendingIndexCount();
+  if (!pending) {
+    indexingBanner.style.display = 'none';
+    return;
+  }
+  indexingBanner.style.display = 'flex';
+  indexingBanner.innerHTML = `
+    <span>🧩 <strong>${pending}</strong> ${pending === 1 ? 'item aguarda' : 'itens aguardam'} a indexação avançada (links, códigos e ferramentas ficam pesquisáveis).</span>
+    <button id="indexing-run-btn" class="btn-primary" type="button">Indexar agora</button>
+    <span id="indexing-progress"></span>
+  `;
+  indexingBanner.querySelector('#indexing-run-btn').addEventListener('click', runIndexing);
+}
+
+async function runIndexing() {
+  if (isIndexing) return;
+  isIndexing = true;
+  const button = indexingBanner.querySelector('#indexing-run-btn');
+  const progress = indexingBanner.querySelector('#indexing-progress');
+  button.disabled = true;
+  let processed = 0;
+  let failures = 0;
+  let busyStreak = 0;
+
+  try {
+    for (let guard = 0; guard < 300; guard++) {
+      progress.textContent = processed ? `Indexados: ${processed}…` : 'Indexando… (cada item leva de 10 a 60 segundos)';
+      const { results = [], remaining = 0 } = await processPendingItems(1);
+      if (!results.length) break;
+      for (const r of results) {
+        if (r.status === 'done' || r.status === 'partial') processed++;
+        else if (r.status === 'failed') failures++;
+      }
+      busyStreak = results.every(r => r.status === 'busy') ? busyStreak + 1 : 0;
+      if (busyStreak >= 3 || remaining === 0) break;
+    }
+    progress.textContent = failures
+      ? `${processed} indexado(s); ${failures} falharam (abra a nota e use "Tentar de novo").`
+      : `${processed} item(ns) indexado(s).`;
+  } catch (err) {
+    progress.textContent = `Interrompido: ${err.message}`;
+  } finally {
+    isIndexing = false;
+    setTimeout(() => { refreshIndexBanner(); loadDashboardData(); }, 2500);
   }
 }
 
@@ -149,19 +229,25 @@ function renderItemsGrid() {
 function switchTab(tab) {
   state.currentTab = tab;
   navBtnFeed.classList.toggle('active', tab === 'feed');
+  navBtnKnowledge.classList.toggle('active', tab === 'knowledge');
   navBtnGraph.classList.toggle('active', tab === 'graph');
   navBtnChat.classList.toggle('active', tab === 'chat');
 
   sectionFeed.style.display = tab === 'feed' ? 'block' : 'none';
+  sectionKnowledge.style.display = tab === 'knowledge' ? 'block' : 'none';
   sectionGraph.style.display = tab === 'graph' ? 'block' : 'none';
   sectionChat.style.display = tab === 'chat' ? 'block' : 'none';
 
   if (tab === 'graph') {
     graphView.update(state.items);
   }
+  if (tab === 'knowledge') {
+    knowledgeView.refresh();
+  }
 }
 
 navBtnFeed.addEventListener('click', () => switchTab('feed'));
+navBtnKnowledge.addEventListener('click', () => switchTab('knowledge'));
 navBtnGraph.addEventListener('click', () => switchTab('graph'));
 navBtnChat.addEventListener('click', () => switchTab('chat'));
 

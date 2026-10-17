@@ -12,7 +12,10 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [100, 300],
+      "position": [
+        100,
+        300
+      ],
       "id": "webhook-trigger",
       "name": "Webhook Captura",
       "webhookId": "second-brain-capture-id"
@@ -52,7 +55,10 @@
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [320, 300],
+      "position": [
+        320,
+        300
+      ],
       "id": "config-node",
       "name": "Configuração"
     },
@@ -82,7 +88,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [430, 120],
+      "position": [
+        430,
+        120
+      ],
       "id": "validate-session",
       "name": "Credencial Supabase",
       "credentials": {
@@ -100,7 +109,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [650, 120],
+      "position": [
+        650,
+        120
+      ],
       "id": "verify-owner",
       "name": "Verificar Dono"
     },
@@ -110,7 +122,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [540, 300],
+      "position": [
+        540,
+        300
+      ],
       "id": "classify-input",
       "name": "Classificar Entrada"
     },
@@ -138,7 +153,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1640, 300],
+      "position": [
+        1640,
+        300
+      ],
       "id": "gemini-analysis",
       "name": "Credencial Gemini",
       "credentials": {
@@ -160,7 +178,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1860, 300],
+      "position": [
+        1860,
+        300
+      ],
       "id": "parse-gemini-output",
       "name": "Parse Resposta Gemini"
     },
@@ -186,7 +207,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2080, 300],
+      "position": [
+        2080,
+        300
+      ],
       "id": "generate-embedding",
       "name": "Gerar Embedding",
       "credentials": {
@@ -228,7 +252,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2300, 300],
+      "position": [
+        2300,
+        300
+      ],
       "id": "save-brain-item",
       "name": "Salvar no Supabase (brain_items)",
       "credentials": {
@@ -266,7 +293,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2520, 300],
+      "position": [
+        2520,
+        300
+      ],
       "id": "save-brain-chunk",
       "name": "Salvar Embedding no Supabase",
       "credentials": {
@@ -281,12 +311,15 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"analysis_ok\": {{ $('Parse Resposta Gemini').first().json.analysis_ok }},\n  \"warnings\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.warnings) }},\n  \"message\": \"Item catalogado no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json.id}}\",\n    \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n    \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }}\n  }\n}",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"analysis_ok\": {{ $('Parse Resposta Gemini').first().json.analysis_ok }},\n  \"warnings\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.warnings) }},\n  \"message\": \"Item catalogado no Segundo Cérebro!\",\n  \"knowledge_status\": {{ JSON.stringify($('Enriquecer Conhecimento').first().json.results?.[0]?.status ?? 'pending') }},\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json.id}}\",\n    \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n    \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }}\n  }\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2740, 300],
+      "position": [
+        2960,
+        300
+      ],
       "id": "respond-webhook",
       "name": "Resposta Webhook"
     },
@@ -298,7 +331,10 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [100, -200],
+      "position": [
+        100,
+        -200
+      ],
       "id": "sticky-credentials",
       "name": "Credenciais necessárias"
     },
@@ -308,7 +344,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 300],
+      "position": [
+        760,
+        300
+      ],
       "id": "prepare-content",
       "name": "Preparar Conteúdo"
     },
@@ -339,7 +378,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [980, 300],
+      "position": [
+        980,
+        300
+      ],
       "id": "needs-fetcher",
       "name": "Precisa do Media Fetcher?"
     },
@@ -358,7 +400,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 180],
+      "position": [
+        1200,
+        180
+      ],
       "id": "media-fetcher",
       "name": "Media Fetcher",
       "onError": "continueRegularOutput",
@@ -377,9 +422,56 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 300],
+      "position": [
+        1420,
+        300
+      ],
       "id": "build-gemini-request",
       "name": "Montar Requisição Gemini"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração').first().json.supabaseUrl }}/functions/v1/brain-process",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Webhook Captura').first().json.headers.authorization }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ item_id: $('Salvar no Supabase (brain_items)').first().json.id }) }}",
+        "options": {
+          "timeout": 150000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2740,
+        300
+      ],
+      "id": "enrich-knowledge",
+      "name": "Enriquecer Conhecimento",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase Anon Key"
+        }
+      },
+      "notes": "Extrai ferramentas, links, códigos e ideias (função brain-process do Supabase). Se falhar, o item continua salvo e fica pendente para reindexar no app.",
+      "notesInFlow": true
     }
   ],
   "connections": {
@@ -486,7 +578,7 @@
       "main": [
         [
           {
-            "node": "Resposta Webhook",
+            "node": "Enriquecer Conhecimento",
             "type": "main",
             "index": 0
           }
@@ -538,6 +630,17 @@
         [
           {
             "node": "Credencial Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enriquecer Conhecimento": {
+      "main": [
+        [
+          {
+            "node": "Resposta Webhook",
             "type": "main",
             "index": 0
           }

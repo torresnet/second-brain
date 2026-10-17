@@ -36,6 +36,9 @@
         <button id="nav-btn-feed" class="tab-btn active">
           <span>📚</span> Acervo de Notas
         </button>
+        <button id="nav-btn-knowledge" class="tab-btn">
+          <span>🧩</span> Conhecimento
+        </button>
         <button id="nav-btn-graph" class="tab-btn">
           <span>🕸️</span> Grafo de Conexões
         </button>
@@ -58,6 +61,7 @@
       <section id="section-feed">
         <!-- Barra de Métricas -->
         <div id="stats-container"></div>
+        <div id="indexing-banner" class="indexing-banner" style="display: none;"></div>
 
         <!-- Controles de Busca e Filtros -->
         <div class="controls-bar">
@@ -93,6 +97,11 @@
         </div>
       </section>
 
+      <!-- Aba: Conhecimento extraído (ferramentas, links, códigos, ideias...) -->
+      <section id="section-knowledge" style="display: none;">
+        <div id="knowledge-mount-point"></div>
+      </section>
+
       <!-- Aba 2: Grafo de Conexões (Inspirado em NoteDiscovery e Neurite) -->
       <section id="section-graph" style="display: none;">
         <div id="graph-mount-point"></div>
@@ -112,7 +121,7 @@
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <span>Segundo Cérebro AI</span>
-        <span class="version-badge">v0.2.1</span>
+        <span class="version-badge">v0.3.0</span>
       </div>
     </footer>
   </div>

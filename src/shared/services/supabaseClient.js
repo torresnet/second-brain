@@ -46,7 +46,7 @@ export async function getBrainItems({ type = 'all', search = '', tag = '' } = {}
   }
 
   if (search && search.trim() !== '') {
-    const term = `%${search.trim()}%`;
+    const term = `%${search.trim().replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()}%`;
     query = query.or(`title.ilike.${term},summary.ilike.${term},raw_content.ilike.${term}`);
   }
 
@@ -162,4 +162,117 @@ export async function deleteBrainItem(id) {
     throw error;
   }
   return true;
+}
+
+/**
+ * Chama uma Edge Function do Supabase e devolve mensagens de erro compreensíveis em PT-BR
+ */
+async function invokeFunction(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (!error) return data;
+
+  const status = error.context?.status;
+  if (status === 404) {
+    throw new Error(`A função "${name}" ainda não foi publicada no Supabase.`);
+  }
+  if (status === 401 || status === 403) {
+    throw new Error('Sessão expirada ou sem permissão. Entre novamente.');
+  }
+  let message = '';
+  try {
+    message = (await error.context?.json?.())?.error || '';
+  } catch {
+    message = '';
+  }
+  throw new Error(message || `Não foi possível falar com a função "${name}".`);
+}
+
+/**
+ * Pergunta ao Segundo Cérebro (busca híbrida + resposta em PT-BR com fontes)
+ */
+export async function askBrain(question, history = []) {
+  return invokeFunction('brain-ask', { question, history });
+}
+
+/**
+ * Reprocessa um item: átomos de conhecimento, varredura de links e índice de busca
+ */
+export async function processItemKnowledge(itemId) {
+  return invokeFunction('brain-process', { item_id: itemId });
+}
+
+/**
+ * Processa itens pendentes (lotes pequenos). Devolve { results, remaining }
+ */
+export async function processPendingItems(limit = 1) {
+  return invokeFunction('brain-process', { mode: 'pending', limit });
+}
+
+const ATOM_COLUMNS =
+  'id,item_id,kind,name,content,explanation,use_for,url,language,inferred,fetch_status,fetch_error,contents_summary,tags,created_at,brain_items(title)';
+
+/**
+ * Lista átomos de conhecimento (ferramentas, links, códigos, ideias...) com filtros
+ */
+export async function getAtoms({ kind = '', search = '', limit = 40, offset = 0 } = {}) {
+  let query = supabase
+    .from('brain_atoms')
+    .select(ATOM_COLUMNS)
+    .order('created_at', { ascending: false })
+    .order('id')
+    .range(offset, offset + limit - 1);
+
+  if (kind) query = query.eq('kind', kind);
+
+  const term = search.trim().replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (term) {
+    const like = `%${term}%`;
+    query = query.or(
+      ['name', 'explanation', 'use_for', 'url', 'content', 'contents_summary'].map(c => `${c}.ilike.${like}`).join(',')
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/**
+ * Átomos de um item específico (para a ficha da nota)
+ */
+export async function getItemAtoms(itemId) {
+  const { data, error } = await supabase
+    .from('brain_atoms')
+    .select(ATOM_COLUMNS)
+    .eq('item_id', itemId)
+    .order('created_at', { ascending: true })
+    .order('id');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/**
+ * Panorama do acervo: totais por categoria, tipo de fonte e tipo de átomo
+ */
+export async function getBrainOverview() {
+  const { data, error } = await supabase.rpc('brain_overview');
+  if (error) throw new Error(error.message);
+  return data || {};
+}
+
+export async function getBrainItemById(id) {
+  const { data, error } = await supabase.from('brain_items').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/**
+ * Quantos itens ainda aguardam a indexação avançada (0 se a migração ainda não foi aplicada)
+ */
+export async function getPendingIndexCount() {
+  const { count, error } = await supabase
+    .from('brain_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('analysis_status', 'pending');
+  return error ? 0 : (count || 0);
 }

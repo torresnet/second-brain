@@ -101,6 +101,11 @@ flowchart TD
   - Dashboard moderno com cards por tipo (Reels, YouTube, Áudios, PDFs, Artigos, Notas).
   - Modal de detalhes rico com transcrição, pontos-chave e **exportador para Markdown (.md) compatível com Obsidian**.
   - Aba de Chat Conversacional para perguntar sobre as anotações do acervo.
+- [x] **Fase 5: Memória externa fiel (v0.3.0)** — ver `supabase/README.md`
+  - Camadas: fonte (original completo) → compreensão (resumo, categoria, usos) → átomos de conhecimento (`brain_atoms`, tipo aberto) → trechos de busca (`brain_chunks`).
+  - Edge Functions `brain-process` (átomos, cobertura de links/código, varredura de links, embeddings) e `brain-ask` (consulta com contexto, resposta concisa em PT-BR e trava anti-link inventado).
+  - Busca híbrida `search_brain` (vetor + texto + nome). Abas "Conhecimento" e chat reescritos.
+  - Pendente de publicação em produção: migração, secret `GEMINI_API_KEY`, deploy das funções e reimport do workflow n8n.
 - [x] **Fase 4: Skill do Gemini / Antigravity (`skills/second-brain`)**
   - Skill global criada em `C:\Users\torre\.gemini\config\skills\second-brain\SKILL.md`.
   - Cópia do workspace em `.agents\skills\second-brain\SKILL.md`.
