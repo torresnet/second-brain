@@ -31,7 +31,7 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
    ```bash
    supabase secrets set GEMINI_API_KEY=SUA_CHAVE --project-ref eicmqisneklcvhakvgce
    ```
-   Opcionais: `GEMINI_MODEL` (padrão `gemini-3.8-flash`), `GEMINI_EMBEDDING_MODEL` (padrão `gemini-embedding-001`), `ALLOWED_ORIGINS` (lista separada por vírgula; padrão: o domínio de produção e localhost).
+   Opcionais: `GEMINI_MODEL` (padrão `gemini-3.8-flash`), `GEMINI_EMBEDDING_MODEL` (padrão `gemini-embedding-001`), `ALLOWED_ORIGINS` (lista separada por vírgula; padrão: só o domínio de produção. Para desenvolvimento local, defina `ALLOWED_ORIGINS=http://localhost:5173`).
 3. **Funções:**
    ```bash
    supabase functions deploy brain-ask --use-api --project-ref eicmqisneklcvhakvgce
@@ -73,4 +73,4 @@ Para cada átomo sorteado, faz uma das perguntas que a IA previu para ele e conf
 - Cada item leva de 10 a 60 segundos para indexar (limite de tempo das Edge Functions: 150 s).
 - O reprocessamento de uma nota já indexada que terminar incompleto (erro da IA, tempo esgotado) NÃO apaga o conhecimento anterior: a nota fica marcada como falha e dá para tentar de novo.
 - Uma nota cujo processamento morre por tempo esgotado 3 vezes seguidas vira "falha" em vez de repetir para sempre.
-- Risco aceito: um domínio malicioso poderia mudar de endereço entre a checagem de segurança e o acesso (DNS rebinding). Mitigações: só portas 80/443, só IPs públicos (inclusive IPv6 mapeado), 1 nível de profundidade, e o conteúdo lido só é exibido para o dono.
+- Risco aceito: um domínio malicioso poderia mudar de endereço entre a checagem de segurança e o acesso (DNS rebinding). Mitigações: só portas 80/443, só IPs públicos (inclusive IPv6 mapeado), 1 nível de profundidade, e o conteúdo lido só é exibido para o dono. Falha na consulta DNS (A ou AAAA) bloqueia a URL; nunca libera só pelo IPv4.

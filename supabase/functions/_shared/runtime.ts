@@ -10,7 +10,8 @@ import { createDohResolver, safeFetchText } from './ssrf.ts';
 import type { DnsResolver } from './ssrf.ts';
 import type { SafeFetch } from './crawl.ts';
 
-const DEFAULT_ORIGINS = ['https://2cerebro.scaladigital.com.br', 'http://localhost:5173', 'http://localhost:4173'];
+// Produção apenas. Para desenvolvimento local, defina ALLOWED_ORIGINS=http://localhost:5173 nas secrets/.env da função.
+const DEFAULT_ORIGINS = ['https://2cerebro.scaladigital.com.br'];
 
 export function corsHeaders(req: Request): Record<string, string> {
   const allowed = (Deno.env.get('ALLOWED_ORIGINS')?.split(',').map(o => o.trim()).filter(Boolean)) ?? DEFAULT_ORIGINS;

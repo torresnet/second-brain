@@ -7,7 +7,23 @@ const WORKFLOW = fileURLToPath(new URL('../../n8n/second_brain_workflow.json', i
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const code = JSON.parse(readFileSync(WORKFLOW, 'utf8')).nodes.find(n => n.id === 'prepare-content').parameters.jsCode;
 
-const HTML = `<html><head><title>Página</title></head><body><article>${'texto legível '.repeat(80)}</article></body></html>`;
+const workflow = JSON.parse(readFileSync(WORKFLOW, 'utf8'));
+
+test('n8n: webhook recusa cedo requisição sem Bearer e não libera origem localhost', async () => {
+  const gate = workflow.nodes.find(n => n.id === 'require-token').parameters.jsCode;
+  const run = (headers) => new AsyncFunction('$input', gate)({ first: () => ({ json: { headers } }), all: () => [{ json: { headers } }] });
+  await assert.rejects(run({}), /Não autenticado/);
+  await assert.rejects(run({ authorization: 'Basic abc' }), /Não autenticado/);
+  await assert.rejects(run({ authorization: 'Bearer ' }), /Não autenticado/);
+  assert.equal((await run({ authorization: 'Bearer abc.def' })).length, 1);
+
+  assert.deepEqual(workflow.connections['Webhook Captura'].main[0].map(c => c.node), ['Exigir Token']);
+  assert.deepEqual(workflow.connections['Exigir Token'].main[0].map(c => c.node), ['Configuração']);
+  const origins = workflow.nodes.find(n => n.id === 'webhook-trigger').parameters.options.allowedOrigins;
+  assert.ok(!/localhost/.test(origins), origins);
+});
+
+const HTML =`<html><head><title>Página</title></head><body><article>${'texto legível '.repeat(80)}</article></body></html>`;
 
 /** Executa o nó "Preparar Conteúdo" real com um httpRequest simulado. */
 async function runNode(url, { pages = {}, dns = {}, failAaaa = false } = {}) {

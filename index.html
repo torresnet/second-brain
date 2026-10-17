@@ -14,12 +14,7 @@
   <link rel="manifest" href="/public/manifest.json" />
 
   <!-- Aplica o tema salvo antes da pintura para evitar o "piscar" -->
-  <script>
-    try {
-      const t = localStorage.getItem('sb:theme');
-      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-    } catch (e) { /* armazenamento indisponível: segue o sistema */ }
-  </script>
+  <script src="/theme-init.js"></script>
 
   <!-- Google Fonts: Geist (interface) & Geist Mono (metadados) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">

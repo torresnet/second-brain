@@ -7,7 +7,7 @@
         "path": "second-brain-capture",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://2cerebro.scaladigital.com.br,http://localhost:5173"
+          "allowedOrigins": "https://2cerebro.scaladigital.com.br"
         }
       },
       "type": "n8n-nodes-base.webhook",
@@ -472,6 +472,19 @@
       },
       "notes": "Extrai ferramentas, links, códigos e ideias (função brain-process do Supabase). Se falhar, o item continua salvo e fica pendente para reindexar no app.",
       "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recusa cedo quem não manda token: não gasta chamada ao Supabase nem processa o corpo\nconst auth = String($input.first().json.headers?.authorization ?? '');\nif (!/^Bearer\\s+\\S+/i.test(auth)) {\n  throw new Error('Não autenticado');\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        210,
+        440
+      ],
+      "id": "require-token",
+      "name": "Exigir Token"
     }
   ],
   "connections": {
@@ -479,7 +492,7 @@
       "main": [
         [
           {
-            "node": "Configuração",
+            "node": "Exigir Token",
             "type": "main",
             "index": 0
           }
@@ -641,6 +654,17 @@
         [
           {
             "node": "Resposta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir Token": {
+      "main": [
+        [
+          {
+            "node": "Configuração",
             "type": "main",
             "index": 0
           }

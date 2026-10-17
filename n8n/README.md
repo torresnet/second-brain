@@ -56,4 +56,12 @@ Este workflow é o motor de ingestão inteligente que roda no seu servidor Cooli
 
 Se algo não puder ser acessado, o item é salvo na caixa de entrada com um aviso e o app informa o motivo.
 
+## 🔒 Segurança do pipeline
+
+- **Token primeiro:** o nó *Exigir Token* recusa na hora requisições sem `Authorization: Bearer`, antes de qualquer chamada ao Supabase. Depois, *Verificar Dono* confirma o dono via `owner_check`.
+- **SSRF:** o nó *Preparar Conteúdo* só busca a internet pública: bloqueia IPs privados/loopback/link-local/metadata (v4 e v6), nomes internos (`media-fetcher`, `localhost`, `*.internal`), credenciais na URL e portas fora de 80/443, resolve o DNS por DoH e revalida cada redirecionamento (no máximo 3, sem follow automático). Os testes em `tests/unit/n8n-ssrf.test.mjs` executam o código real do nó.
+- **CORS:** o webhook só aceita a origem de produção. Para testar localmente, adicione `http://localhost:5173` à mão no nó *Webhook Captura* e não reimporte esse ajuste para produção.
+- **Rate limit (infra):** o n8n não limita taxa. Configure no proxy do Coolify/Traefik um limite por IP para `/webhook/second-brain-capture` (ex.: 30 req/min) e mantenha `N8N_PAYLOAD_SIZE_MAX` no mínimo necessário (16 MB cobre o arquivo de 10 MB do app em base64).
+- **Rede:** o container do n8n não deve alcançar o painel do Coolify nem o endpoint de metadados da nuvem (`169.254.169.254`); bloqueie no firewall do host.
+
 **Limites:** o n8n aceita payloads de até 16 MB por padrão (`N8N_PAYLOAD_SIZE_MAX`), PDFs/imagens por link até 14 MB, e o proxy do Coolify precisa permitir respostas de até ~5 min (vídeos longos).
