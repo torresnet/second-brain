@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/friendlyError.js';
 const ALERTS_KEY = 'sb.capture.alerts';
 
 /**
@@ -86,7 +87,7 @@ export function createCaptureQueue({ execute, findDuplicates, storage, onItemSav
       patchJob(jobId, { status: warning ? 'warning' : 'done', message });
       if (onItemSaved) await onItemSaved();
     } catch (err) {
-      patchJob(jobId, { status: 'error', message: err.message || 'Falha ao processar a captura.' });
+      patchJob(jobId, { status: 'error', message: friendlyError(err, 'Falha ao processar a captura.') });
     }
   }
 

@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.2] - 2026-10-17
+
+### Corrigido
+- **Erros da IA não vazam mais para a tela.** Limite de uso (HTTP 429), sobrecarga, tempo esgotado e falha de rede viram uma frase curta em português, sem URLs nem texto do provedor (toasts, ficha da nota e Edge Functions).
+- **Link sem conteúdo não vira "Indexada".** Notas capturadas sem o conteúdo do link (tags `conteudo-inacessivel`/`erro-extracao`) terminam como falha explicando o motivo, sem gastar cota da IA, e ficam fora das respostas do Perguntar.
+- **Perguntar (modo reduzido)** não lista mais notas ilegíveis antes das relevantes.
+- **Conexões** mostra o acervo inteiro mesmo com filtro ou busca ativos na lista (antes dizia "1 nota(s)").
+- **Central de alertas** não é mais cortada pela barra lateral e posiciona-se a partir do sino.
+- Os avisos de captura ficam acima da barra de pergunta do chat no desktop e a dica de erro da ficha quebra linha no celular.
+- A versão exibida na barra lateral vem do `package.json` (estava fixa em v0.4.0).
+
 ## [0.4.1] - 2026-10-17
 
 ### Corrigido

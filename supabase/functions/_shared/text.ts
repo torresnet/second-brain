@@ -188,3 +188,10 @@ export function truncate(text: string | null | undefined, max: number): string {
   const value = String(text ?? '');
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
+
+const UNREADABLE_TAGS = new Set(['conteudo-inacessivel', 'erro-extracao']);
+
+/** A captura não trouxe o conteúdo do link (só rodapé/login): analisar a nota seria catalogar lixo. */
+export function isUnreadableCapture(tags: readonly string[] | null | undefined): boolean {
+  return Array.isArray(tags) && tags.some(tag => UNREADABLE_TAGS.has(tag));
+}

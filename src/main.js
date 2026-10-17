@@ -34,6 +34,7 @@ import { executeCapture } from './shared/services/captureExecutor.js';
 import { setupThemeToggle } from './shared/services/theme.js';
 import { injectIconSprite, icon } from './shared/utils/icons.js';
 import { escapeHtml } from './shared/utils/markdown.js';
+import { friendlyError } from './shared/utils/friendlyError.js';
 import { filterItemsLocally } from './shared/utils/search.js';
 import { pickForReview, createOpenedTracker } from './shared/utils/review.js';
 
@@ -53,6 +54,7 @@ const state = {
   items: [],
   stats: { total: 0, favorites: 0, byType: {}, topTags: [], topTagCounts: [] },
   itemLinks: [],
+  graphItems: [],
   selectedId: null
 };
 
@@ -119,8 +121,9 @@ const detail = createItemDetail({
           const outcome = result?.results?.[0] ?? result;
           if (outcome?.status === 'not_found') throw new Error('A nota não existe mais.');
           if (outcome?.status === 'busy') throw new Error('Este item já está sendo processado. Aguarde alguns minutos.');
+          if (outcome?.status === 'quota') throw new Error(friendlyError(outcome.warnings?.[0]));
           if (outcome?.status === 'failed') {
-            throw new Error(outcome.warnings?.[0] || 'A indexação falhou. Tente novamente em instantes.');
+            throw new Error(friendlyError(outcome.warnings?.[0], 'A indexação falhou. Tente novamente em instantes.'));
           }
           refreshIndexBanner();
           return outcome?.status === 'partial'
@@ -241,15 +244,19 @@ async function loadDashboardData({ quiet = false } = {}) {
   if (!quiet) itemsList.innerHTML = skeletonRowsHtml();
 
   try {
-    const [items, stats, links] = await Promise.all([
+    // O grafo mostra o acervo inteiro: filtros e busca da lista não podem esvaziá-lo
+    const filtered = hasActiveFilter();
+    const [items, stats, links, graphItems] = await Promise.all([
       getBrainItems({ type: state.filterType, tag: state.filterTag, search: state.searchQuery }),
       getBrainStats(),
-      getItemLinks()
+      getItemLinks(),
+      filtered ? getBrainItems() : null
     ]);
     // Uma recarga mais nova (outro filtro ou busca) já foi pedida: descarta esta resposta
     if (seq !== loadSeq) return;
 
     state.items = items;
+    state.graphItems = graphItems ?? items;
     state.stats = stats;
     state.itemLinks = links;
 
@@ -258,7 +265,7 @@ async function loadDashboardData({ quiet = false } = {}) {
     renderListHeader();
     renderItemsList();
     renderReview();
-    graphView.update(items, state.itemLinks);
+    graphView.update(state.graphItems, state.itemLinks);
     refreshIndexBanner();
   } catch (err) {
     if (seq !== loadSeq) return;
@@ -368,12 +375,17 @@ async function runIndexing() {
   let processed = 0;
   let failures = 0;
   let busyStreak = 0;
+  let quotaHit = false;
 
   try {
     for (let guard = 0; guard < 300; guard++) {
       progress.textContent = processed ? `Indexados: ${processed}…` : 'Indexando… (cada item leva de 10 a 60 segundos)';
       const { results = [], remaining = 0 } = await processPendingItems(1);
       if (!results.length) break;
+      if (results.some(r => r.status === 'quota')) {
+        quotaHit = true;
+        break;
+      }
       for (const r of results) {
         if (r.status === 'done' || r.status === 'partial') processed++;
         else if (r.status === 'failed') failures++;
@@ -381,7 +393,9 @@ async function runIndexing() {
       busyStreak = results.every(r => r.status === 'busy') ? busyStreak + 1 : 0;
       if (busyStreak >= 3 || remaining === 0) break;
     }
-    progress.textContent = failures
+    progress.textContent = quotaHit
+      ? `${processed} indexado(s). O limite de uso da IA acabou por agora; tente de novo mais tarde.`
+      : failures
       ? `${processed} indexado(s); ${failures} falharam (abra a nota e use "Tentar de novo").`
       : `${processed} item(ns) indexado(s).`;
   } catch (err) {
@@ -402,7 +416,7 @@ function switchTab(tab) {
   });
   Object.entries(sections).forEach(([name, el]) => { el.hidden = name !== tab; });
 
-  if (tab === 'graph') graphView.update(state.items, state.itemLinks);
+  if (tab === 'graph') graphView.update(state.graphItems, state.itemLinks);
   if (tab === 'knowledge') knowledgeView.refresh();
 }
 

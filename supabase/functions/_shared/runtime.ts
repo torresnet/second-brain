@@ -71,6 +71,7 @@ export function geminiFromEnv(): Gemini | null {
   if (!apiKey) return null;
   return createGemini({
     apiKey,
+    fallbackApiKey: Deno.env.get('GEMINI_API_KEY_2') || undefined,
     model: Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash',
     embeddingModel: Deno.env.get('GEMINI_EMBEDDING_MODEL') ?? 'gemini-embedding-001'
   });
@@ -120,13 +121,19 @@ export function createProcessStore(supabase: SupabaseClient): ProcessStore {
         .from('brain_items')
         .update({ analysis_status: 'failed', analysis_error: message, analysis_attempts: 0, analysis_updated_at: new Date().toISOString() })
         .eq('id', id);
+    },
+    async markDeferred(id, message) {
+      await supabase
+        .from('brain_items')
+        .update({ analysis_status: 'pending', analysis_error: message, analysis_attempts: 0, analysis_updated_at: new Date().toISOString() })
+        .eq('id', id);
     }
   };
 }
 
 const ATOM_COLUMNS =
   'id,item_id,kind,name,content,explanation,use_for,url,language,inferred,fetch_status,fetch_error,contents_summary';
-const ITEM_BRIEF_COLUMNS = 'id,title,summary,source_type,source_url,category';
+const ITEM_BRIEF_COLUMNS = 'id,title,summary,source_type,source_url,category,tags';
 
 export function createAskDeps(supabase: SupabaseClient, gemini: Gemini): AskDeps {
   return {

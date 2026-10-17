@@ -1,4 +1,5 @@
 import { insertBrainItem } from './supabaseClient.js';
+import { friendlyError } from '../utils/friendlyError.js';
 import {
   isPipelineConfigured,
   sendToPipeline,
@@ -14,7 +15,7 @@ function clip(text) {
 
 function pipelineOutcome(result, successMessage) {
   if (result && result.analysis_ok === false) {
-    const reasons = (result.warnings || []).join(' ');
+    const reasons = [...new Set((result.warnings || []).map((w) => friendlyError(w)))].join(' ');
     return {
       message: `Salvo na caixa de entrada, mas a IA não conseguiu analisar tudo. ${reasons}`.trim(),
       warning: true
@@ -30,7 +31,7 @@ async function tryPipeline(buildPayload, successMessage, fallbackNotice) {
     const result = await sendToPipeline(await buildPayload());
     return { outcome: pipelineOutcome(result, successMessage), notice: '' };
   } catch (err) {
-    return { outcome: null, notice: `${err.message} ${fallbackNotice}` };
+    return { outcome: null, notice: `${friendlyError(err)} ${fallbackNotice}` };
   }
 }
 

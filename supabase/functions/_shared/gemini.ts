@@ -4,6 +4,8 @@ export const EMBEDDING_DIMENSIONS = 768;
 
 export interface GeminiConfig {
   apiKey: string;
+  /** Chave reserva (outro projeto do AI Studio): usada só quando a principal estoura a cota (429). */
+  fallbackApiKey?: string;
   model: string;
   embeddingModel: string;
   fetchImpl?: typeof fetch;
@@ -18,6 +20,14 @@ export class GeminiError extends Error {
     this.name = 'GeminiError';
     this.status = status;
   }
+}
+
+/** Texto curto e sem detalhes do provedor (URLs, cotas) para mostrar ao usuário. */
+export function describeGeminiHttpError(status: number, _providerMessage: string): string {
+  if (status === 429) return 'A IA atingiu o limite de uso por agora. Tente novamente mais tarde.';
+  if (status === 408 || status >= 500) return 'A IA está sobrecarregada ou fora do ar no momento. Tente novamente em instantes.';
+  if (status === 401 || status === 403) return 'A IA recusou o acesso. Verifique a chave do Gemini.';
+  return `A IA não aceitou o pedido (HTTP ${status}).`;
 }
 
 export type EmbedTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY';
@@ -62,6 +72,8 @@ export function createGemini(config: GeminiConfig): Gemini {
   const fetchImpl = config.fetchImpl ?? fetch;
   const sleep = config.sleep ?? ((ms: number) => new Promise(resolve => setTimeout(resolve, ms)));
   const base = config.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta';
+  const keys = [config.apiKey, ...(config.fallbackApiKey ? [config.fallbackApiKey] : [])];
+  let keyIndex = 0; // uma vez na reserva, o resto da execução fica nela (evita repetir 429)
 
   async function post(path: string, body: unknown, timeoutMs: number, attempts = 2): Promise<any> {
     let lastError: Error = new GeminiError('Falha desconhecida ao chamar o Gemini.');
@@ -71,7 +83,7 @@ export function createGemini(config: GeminiConfig): Gemini {
       try {
         const response = await fetchImpl(`${base}/${path}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[keyIndex] },
           body: JSON.stringify(body),
           signal: controller.signal
         });
@@ -80,7 +92,13 @@ export function createGemini(config: GeminiConfig): Gemini {
         try { json = JSON.parse(text); } catch { /* corpo não-JSON */ }
         if (response.ok) return json ?? {};
         const message = json?.error?.message ?? text.slice(0, 200);
-        lastError = new GeminiError(`Gemini HTTP ${response.status}: ${message}`, response.status);
+        console.error(`Gemini HTTP ${response.status}: ${message}`);
+        lastError = new GeminiError(describeGeminiHttpError(response.status, message), response.status);
+        if (response.status === 429 && keyIndex < keys.length - 1) {
+          keyIndex++;
+          attempt--; // repete já com a chave reserva, sem gastar tentativa nem esperar
+          continue;
+        }
         if (!RETRYABLE.has(response.status)) throw lastError;
       } catch (error) {
         if (error instanceof GeminiError && !RETRYABLE.has(error.status)) throw error;

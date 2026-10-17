@@ -31,6 +31,12 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
    ```bash
    supabase secrets set GEMINI_API_KEY=SUA_CHAVE --project-ref eicmqisneklcvhakvgce
    ```
+   Chave reserva (opcional): `GEMINI_API_KEY_2`, de **outro projeto** do AI Studio (a cota é por projeto). Só é usada quando a principal responde 429 (cota estourada); depois disso a execução segue nela. Use a mesma chave da credencial reserva do n8n.
+   ```bash
+   supabase secrets set GEMINI_API_KEY_2=SUA_CHAVE_RESERVA --project-ref eicmqisneklcvhakvgce
+   ```
+   Depois de definir o secret, publique as funções de novo (`brain-process` e `brain-ask`).
+
    Opcionais: `GEMINI_MODEL` (padrão `gemini-3.8-flash`), `GEMINI_EMBEDDING_MODEL` (padrão `gemini-embedding-001`), `ALLOWED_ORIGINS` (lista separada por vírgula; padrão: só o domínio de produção. Para desenvolvimento local, defina `ALLOWED_ORIGINS=http://localhost:5173`).
 3. **Funções:**
    ```bash

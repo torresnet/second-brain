@@ -19,9 +19,19 @@ export function createAlertCenter(mountPoint, queue, { onOpenItem }) {
   const panel = mountPoint.querySelector('.alert-panel');
   let isOpen = false;
 
+  // Fixo e posicionado pelo sino: a barra lateral tem rolagem e cortaria um painel absoluto
+  function placePanel() {
+    const rect = bell.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - panel.offsetWidth - margin);
+    panel.style.left = `${Math.max(margin, left)}px`;
+    panel.style.top = `${rect.bottom + 6}px`;
+  }
+
   function setOpen(next) {
     isOpen = next;
     panel.style.display = next ? 'block' : 'none';
+    if (next) placePanel();
     bell.setAttribute('aria-expanded', String(next));
   }
 
@@ -66,6 +76,7 @@ export function createAlertCenter(mountPoint, queue, { onOpenItem }) {
   });
 
   bell.addEventListener('click', () => setOpen(!isOpen));
+  window.addEventListener('resize', () => { if (isOpen) placePanel(); });
   document.addEventListener('click', (e) => {
     if (isOpen && !mountPoint.contains(e.target)) setOpen(false);
   });

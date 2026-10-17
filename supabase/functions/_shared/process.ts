@@ -8,7 +8,7 @@ import type { PracticalExample } from './examples.ts';
 import type { SafeFetch } from './crawl.ts';
 import type { Gemini } from './gemini.ts';
 import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt } from './prompts.ts';
-import { chunkText, extractUrls, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
+import { chunkText, extractUrls, isUnreadableCapture, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
 
 export interface ItemRow {
   id: string;
@@ -48,6 +48,8 @@ export interface ProcessStore {
   replace(args: ReplaceArgs): Promise<{ atoms: number; chunks: number }>;
   saveExamples(id: string, examples: PracticalExample[]): Promise<void>;
   markFailed(id: string, message: string): Promise<void>;
+  /** Cota da IA esgotada: volta o item para "pendente" (recuperável) em vez de marcá-lo como falho. */
+  markDeferred(id: string, message: string): Promise<void>;
 }
 
 export interface ProcessDeps {
@@ -59,7 +61,7 @@ export interface ProcessDeps {
 }
 
 export interface ProcessResult {
-  status: 'done' | 'partial' | 'failed' | 'busy' | 'not_found';
+  status: 'done' | 'partial' | 'failed' | 'busy' | 'not_found' | 'quota';
   atoms: number;
   chunks: number;
   links: { ok: number; inaccessible: number; skipped: number };
@@ -91,6 +93,12 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
   return results;
 }
 
+const UNREADABLE_MESSAGE = 'O conteúdo do link não pôde ser lido na captura (só a página-base foi obtida).';
+const UNREADABLE_MESSAGE_FOR_USER = `${UNREADABLE_MESSAGE} Reprocessar não resolve: capture o link novamente.`;
+
+const QUOTA_MESSAGE = 'A IA atingiu o limite de uso por agora. A nota continua salva e será indexada quando a cota voltar: use "Indexar agora" mais tarde.';
+const isQuotaError = (e: unknown) => (e as { status?: number } | null)?.status === 429;
+
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function listText(value: unknown): string {
@@ -112,6 +120,12 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
   if (!item) return { ...empty, status: 'not_found' };
   if (!(await store.claim(itemId))) return { ...empty, status: 'busy' };
 
+  // Sem o conteúdo do link não há o que analisar: não gasta cota da IA e não marca como indexada
+  if (isUnreadableCapture(item.tags)) {
+    await store.markFailed(itemId, UNREADABLE_MESSAGE);
+    return { ...empty, status: 'failed', warnings: [UNREADABLE_MESSAGE_FOR_USER] };
+  }
+
   const warnings: string[] = [];
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
@@ -125,6 +139,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     const body = (item.raw_content?.trim() || [item.summary, listText(item.key_takeaways)].filter(Boolean).join('\n\n')).trim();
     const windows = splitWindows(body || title);
     let failedWindows = 0;
+    let quotaWindows = 0;
     let category: string | null = null;
     let useCases: string[] = [];
     const rawAtoms: unknown[] = [];
@@ -144,10 +159,15 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
         }
       } catch (error) {
         failedWindows++;
+        if (isQuotaError(error)) quotaWindows++;
         warnings.push(`Análise por IA falhou na parte ${index + 1}/${windows.length}: ${errText(error)}`);
       }
     });
 
+    if (quotaWindows === windows.length) {
+      await store.markDeferred(itemId, QUOTA_MESSAGE);
+      return { ...empty, status: 'quota', warnings: [QUOTA_MESSAGE] };
+    }
     if (failedWindows === windows.length) {
       const message = warnings.join(' | ') || 'A análise por IA falhou.';
       await store.markFailed(itemId, truncate(message, 500));

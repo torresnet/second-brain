@@ -7,16 +7,16 @@
         "path": "second-brain-capture",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://2cerebro.scaladigital.com.br"
+          "allowedOrigins": "https://2cerebro.scaladigital.com.br,http://localhost:5173"
         }
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        100,
-        300
+        17184,
+        1200
       ],
-      "id": "webhook-trigger",
+      "id": "e6e8c746-6155-4778-abc9-b6b172a5048f",
       "name": "Webhook Captura",
       "webhookId": "second-brain-capture-id"
     },
@@ -56,10 +56,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        320,
-        300
+        17408,
+        1200
       ],
-      "id": "config-node",
+      "id": "eb2801cc-5b03-408b-9295-4fd12e6c27fc",
       "name": "Configuração"
     },
     {
@@ -89,19 +89,19 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        430,
-        120
+        17632,
+        1200
       ],
-      "id": "validate-session",
+      "id": "91688dbd-f70c-4521-bafe-eb3bc59685d1",
       "name": "Credencial Supabase",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Supabase Anon Key"
+          "id": "aU8OJi1ERCgwPkYl",
+          "name": "[ Supabase - ale@alessandrotorres.com.br ] Key"
         }
       },
-      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
-      "notesInFlow": true
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)"
     },
     {
       "parameters": {
@@ -110,10 +110,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        650,
-        120
+        17856,
+        1200
       ],
-      "id": "verify-owner",
+      "id": "90f97216-e073-48da-9190-9227ac822d9c",
       "name": "Verificar Dono"
     },
     {
@@ -123,16 +123,18 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        540,
-        300
+        18080,
+        1200
       ],
-      "id": "classify-input",
+      "id": "f1c5d0ff-86a2-4fc7-af1f-bfa87ee3c8a3",
       "name": "Classificar Entrada"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.geminiModel }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -147,30 +149,28 @@
         "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
         "options": {
           "timeout": 300000
-        },
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1640,
-        300
+        18064,
+        1488
       ],
-      "id": "gemini-analysis",
+      "id": "1c5339ae-a9ab-43e3-99f3-d4498dd135f3",
       "name": "Credencial Gemini",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "",
-          "name": "Gemini API Key"
-        }
-      },
-      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)",
       "notesInFlow": true,
-      "onError": "continueRegularOutput",
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 3000
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mK46AeQhXjV7TLFe",
+          "name": "[ Ai Studio - torresnet@gmail.com ] Key Gemini"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)"
     },
     {
       "parameters": {
@@ -179,16 +179,18 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1860,
-        300
+        18704,
+        1504
       ],
-      "id": "parse-gemini-output",
+      "id": "0146f1cc-368f-4bea-8932-7327b63f3124",
       "name": "Parse Resposta Gemini"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.embeddingModel }}:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -201,31 +203,32 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: 'models/' + $('Configuração').first().json.embeddingModel, outputDimensionality: 768, content: { parts: [{ text: $json.text_for_embedding }] } }) }}",
-        "options": {},
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2080,
-        300
+        17392,
+        1792
       ],
-      "id": "generate-embedding",
+      "id": "d7924aec-b339-4672-9922-edd28baddfa4",
       "name": "Gerar Embedding",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Gemini API Key"
+          "id": "mK46AeQhXjV7TLFe",
+          "name": "[ Ai Studio - torresnet@gmail.com ] Key Gemini"
         }
       },
-      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)",
-      "notesInFlow": true
+      "onError": "continueRegularOutput",
+      "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $('Configuração').first().json.supabaseUrl }}/rest/v1/brain_items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -246,31 +249,31 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n  \"summary\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.summary) }},\n  \"source_type\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_type) }},\n  \"source_url\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_url) }},\n  \"raw_content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.raw_content) }},\n  \"key_takeaways\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.key_takeaways) }},\n  \"action_items\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.action_items) }},\n  \"entities\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.entities) }},\n  \"stage\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.stage) }},\n  \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }},\n  \"metadata\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.metadata) }}\n}",
-        "options": {},
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2300,
-        300
+        18048,
+        1808
       ],
-      "id": "save-brain-item",
+      "id": "59c09f65-d88a-425d-b6ec-fb2228a677c7",
       "name": "Salvar no Supabase (brain_items)",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Supabase Anon Key"
+          "id": "aU8OJi1ERCgwPkYl",
+          "name": "[ Supabase - ale@alessandrotorres.com.br ] Key"
         }
       },
-      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
-      "notesInFlow": true
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $('Configuração').first().json.supabaseUrl }}/rest/v1/brain_chunks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -286,27 +289,25 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"item_id\": \"{{$json.id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.text_for_embedding) }},\n  \"embedding\": {{ JSON.stringify($('Gerar Embedding').first().json.embedding.values) }}\n}",
-        "options": {},
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        "jsonBody": "={\n  \"item_id\": \"{{$json.id}}\",\n  \"chunk_index\": 0,\n  \"content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.text_for_embedding) }},\n  \"embedding\": {{ JSON.stringify(($('Gerar Embedding 2 (reserva)').isExecuted ? $('Gerar Embedding 2 (reserva)') : $('Gerar Embedding')).first().json.embedding.values) }}\n}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2520,
-        300
+        18288,
+        1808
       ],
-      "id": "save-brain-chunk",
+      "id": "1fd89596-314f-4202-bc0d-90b7c0476aa7",
       "name": "Salvar Embedding no Supabase",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Supabase Anon Key"
+          "id": "aU8OJi1ERCgwPkYl",
+          "name": "[ Supabase - ale@alessandrotorres.com.br ] Key"
         }
       },
-      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)",
-      "notesInFlow": true
+      "notes": "🔑 Credencial: Supabase Anon Key\n(Header Auth → Name: apikey)"
     },
     {
       "parameters": {
@@ -317,38 +318,38 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2960,
-        300
+        18736,
+        1808
       ],
-      "id": "respond-webhook",
+      "id": "a7af76da-0d8c-4f2c-b0e7-9e922db8f51e",
       "name": "Resposta Webhook"
     },
     {
       "parameters": {
-        "content": "## 🔑 Credenciais necessárias (Header Auth)\n\n**Supabase Anon Key** → header `apikey`\nNós: Credencial Supabase, Salvar no Supabase (brain_items), Salvar Embedding no Supabase\n\n**Gemini API Key** → header `x-goog-api-key`\nNós: Credencial Gemini, Gerar Embedding\n\n**Media Fetcher Key** → header `X-Api-Key`\nNó: Media Fetcher (serviço `media-fetcher/`, necessário para Instagram/TikTok/vídeos grandes)\n\nTambém ajuste `mediaFetcherUrl` no nó Configuração.\nApós importar, abra cada nó acima e selecione a credencial.",
-        "height": 340,
-        "width": 560
+        "content": "## 🔑 Credenciais necessárias (Header Auth)\n\n**Supabase Anon Key** → header `apikey`\nNós: Credencial Supabase, Salvar no Supabase (brain_items), Salvar Embedding no Supabase\n\n**Gemini API Key** → header `x-goog-api-key`\nNós: Credencial Gemini, Gerar Embedding\n\n**Gemini API Key #2** (outro projeto do AI Studio) → header `x-goog-api-key`\nNó: Credencial Gemini 2 (reserva, só se a chave 1 estourar a cota)\n\n**Media Fetcher Key** → header `X-Api-Key`\nNó: Media Fetcher (serviço `media-fetcher/`, necessário para Instagram/TikTok/vídeos grandes)\n\nTambém ajuste `mediaFetcherUrl` no nó Configuração.\nApós importar, abra cada nó acima e selecione a credencial.",
+        "height": 324,
+        "width": 528
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        100,
-        -200
+        16768,
+        1424
       ],
-      "id": "sticky-credentials",
+      "id": "f4be2147-6860-4f73-9b15-66c67c131ee9",
       "name": "Credenciais necessárias"
     },
     {
       "parameters": {
-        "jsCode": "// Prepara o conteúdo: upload, YouTube (por URL), páginas web, PDFs/arquivos por link e Google Drive\nconst INLINE_LIMIT = 14 * 1024 * 1024;\nconst MAX_PAGE_CHARS = 60000;\nconst BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';\nconst BOT_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uagent.php)';\n\nconst item = $input.first().json;\nconst out = { ...item, fileBase64: null, files: [], fileUri: null, pageText: '', meta: {}, warnings: [], needsFetcher: false, fetchUrl: null };\n\nfunction isInlineMime(mime) {\n  return /^(image|audio|video)\\//.test(mime) || mime === 'application/pdf' || mime.startsWith('text/');\n}\n\nfunction sniffMime(buf, declared, url) {\n  const head = buf.subarray(0, 12);\n  if (head.subarray(0, 4).toString('latin1') === '%PDF') return 'application/pdf';\n  if (head[0] === 0x89 && head[1] === 0x50) return 'image/png';\n  if (head[0] === 0xff && head[1] === 0xd8) return 'image/jpeg';\n  if (declared && declared !== 'application/octet-stream' && declared !== 'binary/octet-stream') return declared;\n  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();\n  const map = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', txt: 'text/plain', md: 'text/markdown' };\n  return map[ext] || declared || 'application/octet-stream';\n}\n\nfunction decodeEntities(s) {\n  return s\n    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;|&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n)))\n    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));\n}\n\nfunction metaTag(html, key) {\n  const re1 = new RegExp('<meta[^>]+(?:property|name)=[\"\\']' + key + '[\"\\'][^>]*content=[\"\\']([^\"\\']*)[\"\\']', 'i');\n  const re2 = new RegExp('<meta[^>]+content=[\"\\']([^\"\\']*)[\"\\'][^>]*(?:property|name)=[\"\\']' + key + '[\"\\']', 'i');\n  const m = html.match(re1) || html.match(re2);\n  return m ? decodeEntities(m[1]).trim() : '';\n}\n\nfunction extractHtml(html) {\n  const titleTag = (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '';\n  const meta = {\n    title: metaTag(html, 'og:title') || decodeEntities(titleTag).trim(),\n    description: metaTag(html, 'og:description') || metaTag(html, 'description'),\n    uploader: metaTag(html, 'author') || metaTag(html, 'og:site_name')\n  };\n  let body = html\n    .replace(/<!--[\\s\\S]*?-->/g, ' ')\n    .replace(/<(script|style|noscript|svg|template|iframe)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  const main = body.match(/<(article|main)[\\s\\S]*?<\\/\\1>/i);\n  if (main && main[0].length > 800) body = main[0];\n  else body = body.replace(/<(nav|header|footer|aside|form)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  body = body\n    .replace(/<(br|\\/p|\\/div|\\/li|\\/h[1-6]|\\/tr|\\/section)[^>]*>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n  const text = decodeEntities(body).replace(/[ \\t\\f\\v]+/g, ' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return { meta, text: text.slice(0, MAX_PAGE_CHARS) };\n}\n\n// --- Proteção SSRF: só internet pública (mesma regra de supabase/functions/_shared/ssrf.ts) ---\nconst this_helpers = this.helpers;\nconst MAX_REDIRECTS = 3;\nconst BLOCKED_HOSTS = /^(localhost|.*\\.localhost|.*\\.local|.*\\.internal|.*\\.lan|.*\\.home|metadata\\.google\\.internal)$/i;\n\nfunction ipv6Bytes(input) {\n  let value = input;\n  const dotted = value.match(/^(.*:)(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);\n  if (dotted) {\n    const p = dotted[2].split('.').map(Number);\n    if (p.some(n => n > 255)) return null;\n    value = dotted[1] + ((p[0] << 8) | p[1]).toString(16) + ':' + ((p[2] << 8) | p[3]).toString(16);\n  }\n  const halves = value.split('::');\n  if (halves.length > 2) return null;\n  const head = halves[0] ? halves[0].split(':') : [];\n  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];\n  const missing = 8 - head.length - tail.length;\n  if (halves.length === 1 ? head.length !== 8 : missing < 1) return null;\n  const groups = halves.length === 1 ? head : head.concat(new Array(missing).fill('0'), tail);\n  const bytes = [];\n  for (const g of groups) {\n    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;\n    const n = parseInt(g, 16);\n    bytes.push(n >> 8, n & 255);\n  }\n  return bytes;\n}\n\nfunction isPrivateIp(ip) {\n  const value = String(ip).trim().toLowerCase();\n  if (value.includes(':')) {\n    const b = ipv6Bytes(value);\n    if (!b) return true;\n    const v4 = o => b[o] + '.' + b[o + 1] + '.' + b[o + 2] + '.' + b[o + 3];\n    const zeros = (from, to) => b.slice(from, to).every(x => x === 0);\n    if (zeros(0, 10) && b[10] === 255 && b[11] === 255) return isPrivateIp(v4(12));\n    if (zeros(0, 12)) return true;\n    if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && zeros(4, 12)) return isPrivateIp(v4(12));\n    if (b[0] === 0x20 && b[1] === 0x02) return isPrivateIp(v4(2));\n    return (b[0] & 0xe0) !== 0x20 || (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0x00 && b[3] === 0x00);\n  }\n  const parts = value.split('.').map(Number);\n  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;\n  const a = parts[0], b = parts[1];\n  return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||\n    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) ||\n    (a === 198 && (b === 18 || b === 19)) || a >= 224;\n}\n\nasync function resolveHost(host) {\n  const query = async type => {\n    const r = await this_helpers.httpRequest({\n      method: 'GET',\n      url: 'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(host) + '&type=' + type,\n      headers: { Accept: 'application/dns-json' },\n      json: true,\n      timeout: 10000\n    });\n    return (r.Answer || []).filter(a => a.type === (type === 'A' ? 1 : 28)).map(a => a.data);\n  };\n  const results = await Promise.all([query('A'), query('AAAA')]);\n  return results[0].concat(results[1]);\n}\n\nasync function assertPublicUrl(raw) {\n  let url;\n  try { url = new URL(raw); } catch (e) { throw new Error('URL inválida'); }\n  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Protocolo não permitido');\n  if (url.username || url.password) throw new Error('URL com credenciais não permitida');\n  if (url.port && !['80', '443'].includes(url.port)) throw new Error('Porta não permitida');\n  const host = url.hostname.replace(/^\\[|\\]$/g, '').replace(/\\.+$/, '');\n  if (BLOCKED_HOSTS.test(host)) throw new Error('Endereço interno bloqueado');\n  if (/^\\d+\\.\\d+\\.\\d+\\.\\d+$/.test(host) || host.includes(':')) {\n    if (isPrivateIp(host)) throw new Error('Endereço interno bloqueado');\n    return url;\n  }\n  if (!host.includes('.')) throw new Error('Endereço interno bloqueado');\n  let addresses;\n  try { addresses = await resolveHost(host); } catch (e) { throw new Error('Domínio não resolvido'); }\n  if (!addresses.length) throw new Error('Domínio não resolvido');\n  if (addresses.some(isPrivateIp)) throw new Error('Endereço interno bloqueado');\n  return url;\n}\n\n// GET que valida o destino e cada redirecionamento (sem seguir redirects automaticamente)\nasync function httpGet(url, ua, method) {\n  let current = url;\n  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {\n    await assertPublicUrl(current);\n    const r = await this_helpers.httpRequest({\n      method: method || 'GET',\n      url: current,\n      headers: { 'User-Agent': ua, 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },\n      encoding: 'arraybuffer',\n      returnFullResponse: true,\n      ignoreHttpStatusCode: true,\n      disableFollowRedirect: true,\n      json: false,\n      timeout: 60000\n    });\n    const status = r.statusCode || 200;\n    const location = r.headers && r.headers.location;\n    if (status >= 300 && status < 400 && location) {\n      current = new URL(location, current).toString();\n      continue;\n    }\n    return r;\n  }\n  throw new Error('Redirecionamentos demais');\n}\n\nfunction youtubeUrl(url) {\n  let u;\n  try { u = new URL(url); } catch (e) { return null; }\n  let id = null;\n  if (/youtu\\.be$/i.test(u.hostname)) id = u.pathname.slice(1).split('/')[0];\n  else if (u.pathname === '/watch') id = u.searchParams.get('v');\n  else {\n    const m = u.pathname.match(/^\\/(?:shorts|live|embed|v)\\/([\\w-]{6,})/);\n    if (m) id = m[1];\n  }\n  return id ? 'https://www.youtube.com/watch?v=' + id : null;\n}\n\nfunction googleExportUrl(url) {\n  const drive = url.match(/drive\\.google\\.com\\/(?:file\\/d\\/|open\\?id=|uc\\?(?:[^#]*&)?id=)([\\w-]+)/i);\n  if (drive) return 'https://drive.usercontent.google.com/download?id=' + drive[1] + '&export=download&confirm=t';\n  const doc = url.match(/docs\\.google\\.com\\/(document|spreadsheets|presentation)\\/d\\/([\\w-]+)/i);\n  if (doc) return 'https://docs.google.com/' + doc[1] + '/d/' + doc[2] + '/export?format=pdf';\n  if (/dropbox\\.com/i.test(url)) return url.replace(/([?&])dl=0/, '$1dl=1');\n  return null;\n}\n\nfunction addFile(mime, base64) {\n  out.files.push({ mime, base64 });\n}\n\nfunction useBuffer(buf, mime, label) {\n  if (mime.startsWith('text/') || mime === 'application/json') {\n    out.pageText = buf.toString('utf8').slice(0, MAX_PAGE_CHARS);\n    return;\n  }\n  if (!isInlineMime(mime)) {\n    out.warnings.push('Formato não suportado para análise (' + mime + '). Converta para PDF, imagem, áudio, vídeo ou texto.');\n    return;\n  }\n  if (buf.length > INLINE_LIMIT) {\n    if (/^(video|audio)\\//.test(mime)) { out.needsFetcher = true; return; }\n    out.warnings.push((label || 'Arquivo') + ' maior que 14 MB: reduza o tamanho ou divida o arquivo.');\n    return;\n  }\n  addFile(mime, buf.toString('base64'));\n}\n\nasync function run() {\n  if (item.strategy === 'upload') {\n    const buf = Buffer.from(item.fileBase64 || '', 'base64');\n    useBuffer(buf, item.fileMime || 'application/octet-stream', 'Arquivo');\n    if (item.hint && !out.meta.title) out.meta.title = item.hint;\n    return;\n  }\n\n  if (item.strategy === 'youtube') {\n    const normalized = youtubeUrl(item.url);\n    if (normalized) out.fileUri = normalized;\n    else out.warnings.push('Link do YouTube sem vídeo específico (playlist/canal): cole o link de um vídeo.');\n    return;\n  }\n\n  if (item.strategy === 'social') {\n    out.needsFetcher = true;\n    out.fetchUrl = item.url;\n    try {\n      const r = await httpGet(item.url, BOT_UA);\n      const ct = String(r.headers['content-type'] || '');\n      if (ct.includes('html')) {\n        const page = extractHtml(Buffer.from(r.body).toString('utf8'));\n        out.meta = page.meta;\n      }\n    } catch (e) { /* meta é opcional */ }\n    return;\n  }\n\n  if (item.strategy === 'web') {\n    const direct = googleExportUrl(item.url);\n    const target = direct || item.url;\n    let r;\n    try {\n      r = await httpGet(target, BROWSER_UA);\n    } catch (e) {\n      out.warnings.push('Não foi possível acessar o link: ' + e.message);\n      return;\n    }\n    const status = r.statusCode || 200;\n    const buf = Buffer.from(r.body);\n    if (status >= 400) {\n      out.warnings.push('O link respondeu HTTP ' + status + (status === 403 || status === 401 ? ' (acesso restrito ou exige login).' : '.'));\n      return;\n    }\n    const declared = String(r.headers['content-type'] || '').split(';')[0].trim().toLowerCase();\n    const mime = sniffMime(buf, declared, target);\n    if (mime === 'text/html' || mime === 'application/xhtml+xml') {\n      if (direct) {\n        out.warnings.push('O arquivo do Google Drive/Docs não é público (\"qualquer pessoa com o link\") ou exige confirmação.');\n        if (/drive\\.usercontent|drive\\.google/.test(direct)) { out.needsFetcher = true; out.fetchUrl = direct; }\n        return;\n      }\n      const page = extractHtml(buf.toString('utf8'));\n      out.meta = page.meta;\n      out.pageText = page.text;\n      if (page.text.length < 300) {\n        out.warnings.push('A página tem pouco texto legível (pode carregar o conteúdo via JavaScript ou exigir login).');\n      }\n      return;\n    }\n    useBuffer(buf, mime, 'Arquivo');\n    if (out.needsFetcher) out.fetchUrl = target;\n    if (mime === 'application/pdf') out.sourceType = 'pdf';\n    else if (mime.startsWith('audio/')) out.sourceType = 'audio';\n    else if (mime.startsWith('video/')) out.sourceType = 'reel';\n    else if (mime.startsWith('image/')) out.sourceType = 'note';\n    return;\n  }\n}\n\nawait run();\nreturn [{ json: out }];"
+        "jsCode": "// Prepara o conteúdo: upload, YouTube (por URL), páginas web, PDFs/arquivos por link e Google Drive\nconst INLINE_LIMIT = 14 * 1024 * 1024;\nconst MAX_PAGE_CHARS = 60000;\nconst BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';\nconst BOT_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uagent.php)';\n\nconst item = $input.first().json;\nconst out = { ...item, fileBase64: null, files: [], fileUri: null, pageText: '', meta: {}, warnings: [], needsFetcher: false, fetchUrl: null };\n\nfunction isInlineMime(mime) {\n  return /^(image|audio|video)\\//.test(mime) || mime === 'application/pdf' || mime.startsWith('text/');\n}\n\nfunction sniffMime(buf, declared, url) {\n  const head = buf.subarray(0, 12);\n  if (head.subarray(0, 4).toString('latin1') === '%PDF') return 'application/pdf';\n  if (head[0] === 0x89 && head[1] === 0x50) return 'image/png';\n  if (head[0] === 0xff && head[1] === 0xd8) return 'image/jpeg';\n  if (declared && declared !== 'application/octet-stream' && declared !== 'binary/octet-stream') return declared;\n  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();\n  const map = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', txt: 'text/plain', md: 'text/markdown' };\n  return map[ext] || declared || 'application/octet-stream';\n}\n\nfunction decodeEntities(s) {\n  return s\n    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;|&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n)))\n    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));\n}\n\nfunction metaTag(html, key) {\n  const re1 = new RegExp('<meta[^>]+(?:property|name)=[\"\\']' + key + '[\"\\'][^>]*content=[\"\\']([^\"\\']*)[\"\\']', 'i');\n  const re2 = new RegExp('<meta[^>]+content=[\"\\']([^\"\\']*)[\"\\'][^>]*(?:property|name)=[\"\\']' + key + '[\"\\']', 'i');\n  const m = html.match(re1) || html.match(re2);\n  return m ? decodeEntities(m[1]).trim() : '';\n}\n\nfunction extractHtml(html) {\n  const titleTag = (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '';\n  const meta = {\n    title: metaTag(html, 'og:title') || decodeEntities(titleTag).trim(),\n    description: metaTag(html, 'og:description') || metaTag(html, 'description'),\n    uploader: metaTag(html, 'author') || metaTag(html, 'og:site_name')\n  };\n  let body = html\n    .replace(/<!--[\\s\\S]*?-->/g, ' ')\n    .replace(/<(script|style|noscript|svg|template|iframe)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  const main = body.match(/<(article|main)[\\s\\S]*?<\\/\\1>/i);\n  if (main && main[0].length > 800) body = main[0];\n  else body = body.replace(/<(nav|header|footer|aside|form)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  body = body\n    .replace(/<(br|\\/p|\\/div|\\/li|\\/h[1-6]|\\/tr|\\/section)[^>]*>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n  const text = decodeEntities(body).replace(/[ \\t\\f\\v]+/g, ' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return { meta, text: text.slice(0, MAX_PAGE_CHARS) };\n}\n\nasync function httpGet(url, ua, method) {\n  return this_helpers.httpRequest({\n    method: method || 'GET',\n    url,\n    headers: { 'User-Agent': ua, 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    ignoreHttpStatusCode: true,\n    json: false,\n    timeout: 60000\n  });\n}\nconst this_helpers = this.helpers;\n\nfunction youtubeUrl(url) {\n  let u;\n  try { u = new URL(url); } catch (e) { return null; }\n  let id = null;\n  if (/youtu\\.be$/i.test(u.hostname)) id = u.pathname.slice(1).split('/')[0];\n  else if (u.pathname === '/watch') id = u.searchParams.get('v');\n  else {\n    const m = u.pathname.match(/^\\/(?:shorts|live|embed|v)\\/([\\w-]{6,})/);\n    if (m) id = m[1];\n  }\n  return id ? 'https://www.youtube.com/watch?v=' + id : null;\n}\n\nfunction googleExportUrl(url) {\n  const drive = url.match(/drive\\.google\\.com\\/(?:file\\/d\\/|open\\?id=|uc\\?(?:[^#]*&)?id=)([\\w-]+)/i);\n  if (drive) return 'https://drive.usercontent.google.com/download?id=' + drive[1] + '&export=download&confirm=t';\n  const doc = url.match(/docs\\.google\\.com\\/(document|spreadsheets|presentation)\\/d\\/([\\w-]+)/i);\n  if (doc) return 'https://docs.google.com/' + doc[1] + '/d/' + doc[2] + '/export?format=pdf';\n  if (/dropbox\\.com/i.test(url)) return url.replace(/([?&])dl=0/, '$1dl=1');\n  return null;\n}\n\nfunction addFile(mime, base64) {\n  out.files.push({ mime, base64 });\n}\n\nfunction useBuffer(buf, mime, label) {\n  if (mime.startsWith('text/') || mime === 'application/json') {\n    out.pageText = buf.toString('utf8').slice(0, MAX_PAGE_CHARS);\n    return;\n  }\n  if (!isInlineMime(mime)) {\n    out.warnings.push('Formato não suportado para análise (' + mime + '). Converta para PDF, imagem, áudio, vídeo ou texto.');\n    return;\n  }\n  if (buf.length > INLINE_LIMIT) {\n    if (/^(video|audio)\\//.test(mime)) { out.needsFetcher = true; return; }\n    out.warnings.push((label || 'Arquivo') + ' maior que 14 MB: reduza o tamanho ou divida o arquivo.');\n    return;\n  }\n  addFile(mime, buf.toString('base64'));\n}\n\nasync function run() {\n  if (item.strategy === 'upload') {\n    const buf = Buffer.from(item.fileBase64 || '', 'base64');\n    useBuffer(buf, item.fileMime || 'application/octet-stream', 'Arquivo');\n    if (item.hint && !out.meta.title) out.meta.title = item.hint;\n    return;\n  }\n\n  if (item.strategy === 'youtube') {\n    const normalized = youtubeUrl(item.url);\n    if (normalized) out.fileUri = normalized;\n    else out.warnings.push('Link do YouTube sem vídeo específico (playlist/canal): cole o link de um vídeo.');\n    return;\n  }\n\n  if (item.strategy === 'social') {\n    out.needsFetcher = true;\n    out.fetchUrl = item.url;\n    try {\n      const r = await httpGet(item.url, BOT_UA);\n      const ct = String(r.headers['content-type'] || '');\n      if (ct.includes('html')) {\n        const page = extractHtml(Buffer.from(r.body).toString('utf8'));\n        out.meta = page.meta;\n      }\n    } catch (e) { /* meta é opcional */ }\n    return;\n  }\n\n  if (item.strategy === 'web') {\n    const direct = googleExportUrl(item.url);\n    const target = direct || item.url;\n    let r;\n    try {\n      r = await httpGet(target, BROWSER_UA);\n    } catch (e) {\n      out.warnings.push('Não foi possível acessar o link: ' + e.message);\n      return;\n    }\n    const status = r.statusCode || 200;\n    const buf = Buffer.from(r.body);\n    if (status >= 400) {\n      out.warnings.push('O link respondeu HTTP ' + status + (status === 403 || status === 401 ? ' (acesso restrito ou exige login).' : '.'));\n      return;\n    }\n    const declared = String(r.headers['content-type'] || '').split(';')[0].trim().toLowerCase();\n    const mime = sniffMime(buf, declared, target);\n    if (mime === 'text/html' || mime === 'application/xhtml+xml') {\n      if (direct) {\n        out.warnings.push('O arquivo do Google Drive/Docs não é público (\"qualquer pessoa com o link\") ou exige confirmação.');\n        if (/drive\\.usercontent|drive\\.google/.test(direct)) { out.needsFetcher = true; out.fetchUrl = direct; }\n        return;\n      }\n      const page = extractHtml(buf.toString('utf8'));\n      out.meta = page.meta;\n      out.pageText = page.text;\n      if (page.text.length < 300) {\n        out.warnings.push('A página tem pouco texto legível (pode carregar o conteúdo via JavaScript ou exigir login).');\n      }\n      return;\n    }\n    useBuffer(buf, mime, 'Arquivo');\n    if (out.needsFetcher) out.fetchUrl = target;\n    if (mime === 'application/pdf') out.sourceType = 'pdf';\n    else if (mime.startsWith('audio/')) out.sourceType = 'audio';\n    else if (mime.startsWith('video/')) out.sourceType = 'reel';\n    else if (mime.startsWith('image/')) out.sourceType = 'note';\n    return;\n  }\n}\n\nawait run();\nreturn [{ json: out }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        760,
-        300
+        18304,
+        1200
       ],
-      "id": "prepare-content",
+      "id": "74d9d5a5-653e-4288-bba6-86f445e06689",
       "name": "Preparar Conteúdo"
     },
     {
@@ -379,10 +380,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        980,
-        300
+        17392,
+        1472
       ],
-      "id": "needs-fetcher",
+      "id": "a7362070-4b8b-4117-a05d-99957db2c5d1",
       "name": "Precisa do Media Fetcher?"
     },
     {
@@ -401,20 +402,20 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1200,
-        180
+        17616,
+        1408
       ],
-      "id": "media-fetcher",
+      "id": "99a05484-d8cd-4f71-8581-f5f652abe9c9",
       "name": "Media Fetcher",
-      "onError": "continueRegularOutput",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Media Fetcher Key"
+          "id": "P6d8hPpbRgC4lOzV",
+          "name": "[ Hetzner ] Media Fetcher Key"
         }
       },
-      "notes": "🔑 Credencial: Media Fetcher Key\n(Header Auth → Name: X-Api-Key)\nBaixa Reels/TikTok/vídeos grandes (yt-dlp + ffmpeg).",
-      "notesInFlow": true
+      "onError": "continueRegularOutput",
+      "notes": "🔑 Credencial: Media Fetcher Key\n(Header Auth → Name: X-Api-Key)\nBaixa Reels/TikTok/vídeos grandes (yt-dlp + ffmpeg)."
     },
     {
       "parameters": {
@@ -423,10 +424,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1420,
-        300
+        17840,
+        1488
       ],
-      "id": "build-gemini-request",
+      "id": "9fe0980e-5b96-401c-b277-05062f175d96",
       "name": "Montar Requisição Gemini"
     },
     {
@@ -458,41 +459,179 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2740,
-        300
+        18512,
+        1808
       ],
-      "id": "enrich-knowledge",
+      "id": "8b48dcef-7093-4cdd-ad51-b5711af739a0",
       "name": "Enriquecer Conhecimento",
-      "onError": "continueRegularOutput",
+      "notesInFlow": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "",
-          "name": "Supabase Anon Key"
+          "id": "aU8OJi1ERCgwPkYl",
+          "name": "[ Supabase - ale@alessandrotorres.com.br ] Key"
         }
       },
-      "notes": "Extrai ferramentas, links, códigos e ideias (função brain-process do Supabase). Se falhar, o item continua salvo e fica pendente para reindexar no app.",
-      "notesInFlow": true
+      "onError": "continueRegularOutput",
+      "notes": "Extrai ferramentas, links, códigos e ideias (função brain-process do Supabase). Se falhar, o item continua salvo e fica pendente para reindexar no app."
     },
     {
       "parameters": {
-        "jsCode": "// Recusa cedo quem não manda token: não gasta chamada ao Supabase nem processa o corpo\nconst auth = String($input.first().json.headers?.authorization ?? '');\nif (!/^Bearer\\s+\\S+/i.test(auth)) {\n  throw new Error('Não autenticado');\n}\nreturn $input.all();"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "gemini-quota-cond",
+              "leftValue": "={{ !$json.candidates && /429|RESOURCE_EXHAUSTED|quota/i.test(JSON.stringify($json.error ?? $json)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "position": [
-        210,
-        440
+        18304,
+        1488
       ],
-      "id": "require-token",
-      "name": "Exigir Token"
+      "id": "58bb3708-1ace-4de8-bb9b-343668873684",
+      "name": "Cota do Gemini estourou?",
+      "notesInFlow": true,
+      "notes": "Se a chave 1 respondeu 429 / RESOURCE_EXHAUSTED / quota, repete a chamada com a chave 2. Outros casos seguem direto para o Parse."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.geminiModel }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        18528,
+        1424
+      ],
+      "id": "5c3c3f7b-de2f-48db-b430-ed446cf826c3",
+      "name": "Credencial Gemini 2 (reserva)",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1goi9IzLBDngqake",
+          "name": "[ Ai Studio - somentetorres@gmail.com ] Key Gemini"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "🔑 Credencial: Gemini API Key #2 (outro projeto do AI Studio)\n(Header Auth → Name: x-goog-api-key)\nReserva: só roda quando a chave 1 estoura a cota."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "embed-quota-cond",
+              "leftValue": "={{ !$json.embedding && /429|RESOURCE_EXHAUSTED|quota/i.test(JSON.stringify($json.error ?? $json)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        17568,
+        1792
+      ],
+      "id": "37047832-85a5-4bc1-bc27-c0633958f603",
+      "name": "Cota do embedding estourou?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Configuração').first().json.embeddingModel }}:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'models/' + $('Configuração').first().json.embeddingModel, outputDimensionality: 768, content: { parts: [{ text: $json.text_for_embedding }] } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        17824,
+        1712
+      ],
+      "id": "2d2a3008-7d72-4fa9-ab23-1e69aa03b05f",
+      "name": "Gerar Embedding 2 (reserva)",
+      "notesInFlow": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1goi9IzLBDngqake",
+          "name": "[ Ai Studio - somentetorres@gmail.com ] Key Gemini"
+        }
+      },
+      "notes": "🔑 Credencial: Gemini API Key #2 (mesma do nó Credencial Gemini 2)\n(Header Auth → Name: x-goog-api-key)\nReserva: só roda quando a chave 1 estoura a cota."
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook Captura": {
       "main": [
         [
           {
-            "node": "Exigir Token",
+            "node": "Configuração",
             "type": "main",
             "index": 0
           }
@@ -547,7 +686,7 @@
       "main": [
         [
           {
-            "node": "Parse Resposta Gemini",
+            "node": "Cota do Gemini estourou?",
             "type": "main",
             "index": 0
           }
@@ -569,7 +708,7 @@
       "main": [
         [
           {
-            "node": "Salvar no Supabase (brain_items)",
+            "node": "Cota do embedding estourou?",
             "type": "main",
             "index": 0
           }
@@ -660,16 +799,75 @@
         ]
       ]
     },
-    "Exigir Token": {
+    "Cota do Gemini estourou?": {
       "main": [
         [
           {
-            "node": "Configuração",
+            "node": "Credencial Gemini 2 (reserva)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Resposta Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Credencial Gemini 2 (reserva)": {
+      "main": [
+        [
+          {
+            "node": "Parse Resposta Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cota do embedding estourou?": {
+      "main": [
+        [
+          {
+            "node": "Gerar Embedding 2 (reserva)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Salvar no Supabase (brain_items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Embedding 2 (reserva)": {
+      "main": [
+        [
+          {
+            "node": "Salvar no Supabase (brain_items)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7b46b79a-4970-4841-984f-2e8e3b08e916",
+  "meta": {
+    "instanceId": "b042db5da7b1491f89a47c14dc9053f84325bfe508bbec271c0da781030c3f46"
+  },
+  "nodeGroups": [],
+  "id": "3BuFnR1bClJNpo4N",
+  "tags": []
 }

@@ -2,7 +2,7 @@
 
 import { normalizeKind } from './atoms.ts';
 import type { Gemini } from './gemini.ts';
-import { bareUrlPattern, canonicalKey, extractUrls, normalizeUrl, slugify, truncate } from './text.ts';
+import { bareUrlPattern, canonicalKey, extractUrls, isUnreadableCapture, normalizeUrl, slugify, truncate } from './text.ts';
 
 export interface HistoryTurn {
   role: 'user' | 'assistant';
@@ -41,6 +41,7 @@ export interface ItemBrief {
   source_type: string | null;
   source_url: string | null;
   category: string | null;
+  tags?: string[] | null;
 }
 
 export interface AskDeps {
@@ -315,7 +316,11 @@ export async function askBrain(question: string, history: HistoryTurn[], deps: A
 
   const atomIds = [...new Set(hits.map(h => h.atom_id).filter((id): id is string => Boolean(id)))];
   const itemIds = [...new Set(hits.map(h => h.item_id))];
-  const loaded = itemIds.length ? await deps.loadContext(atomIds, itemIds) : { atoms: [], items: [] };
+  const rawLoaded = itemIds.length ? await deps.loadContext(atomIds, itemIds) : { atoms: [], items: [] };
+  const unreadable = new Set(rawLoaded.items.filter(i => isUnreadableCapture(i.tags)).map(i => i.id));
+  const loaded = unreadable.size
+    ? { items: rawLoaded.items.filter(i => !unreadable.has(i.id)), atoms: rawLoaded.atoms.filter(a => !unreadable.has(a.item_id)) }
+    : rawLoaded;
 
   const wantsOverview = understanding.needs_overview || understanding.intent === 'panorama';
   const overview = wantsOverview ? await deps.overview() : null;

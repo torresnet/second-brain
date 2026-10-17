@@ -1,6 +1,7 @@
 import { formatDateBR, getMediaBadge, getStageBadge, downloadMarkdownFile, copyToClipboard } from '../shared/utils/formatters.js';
 import { getItemAtoms, getPossibleDuplicates, setDuplicateDecision } from '../shared/services/supabaseClient.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
+import { friendlyError } from '../shared/utils/friendlyError.js';
 import { icon } from '../shared/utils/icons.js';
 import { atomCardHtml } from './KnowledgeView.js';
 
@@ -377,7 +378,7 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
         renderAtoms(updated);
       }
     } catch (err) {
-      analysisStatusEl.textContent = err.message;
+      analysisStatusEl.textContent = friendlyError(err);
       reprocessBtn.disabled = false;
       reprocessBtn.textContent = 'Tentar de novo';
     }
