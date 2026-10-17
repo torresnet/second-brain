@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { APP_CONFIG } from '../constants/config.js';
+import { sanitizeFilterTerm } from '../utils/postgrest.js';
 
 export const supabase = createClient(
   APP_CONFIG.supabase.url,
@@ -46,7 +47,7 @@ export async function getBrainItems({ type = 'all', search = '', tag = '' } = {}
   }
 
   if (search && search.trim() !== '') {
-    const term = `%${search.trim().replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()}%`;
+    const term = `%${sanitizeFilterTerm(search)}%`;
     query = query.or(`title.ilike.${term},summary.ilike.${term},raw_content.ilike.${term}`);
   }
 
@@ -225,7 +226,7 @@ export async function getAtoms({ kind = '', search = '', limit = 40, offset = 0 
 
   if (kind) query = query.eq('kind', kind);
 
-  const term = search.trim().replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const term = sanitizeFilterTerm(search);
   if (term) {
     const like = `%${term}%`;
     query = query.or(

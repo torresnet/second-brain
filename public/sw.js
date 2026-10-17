@@ -1,5 +1,12 @@
 const CACHE_NAME = 'second-brain-v3';
 const SHARED_CACHE = 'share-target-files';
+const MAX_SHARED_FILE_BYTES = 10 * 1024 * 1024; // mesmo limite do app
+const SHARED_FILE_TYPE = /^(application\/pdf|image\/|audio\/|video\/|text\/plain|text\/markdown)/i;
+const SHARED_FILE_EXT = /\.(pdf|md|txt|png|jpe?g|webp|heic|heif|mp3|wav|m4a|aac|ogg|flac|mp4|mov|webm|3gp)$/i;
+
+function isAcceptedSharedFile(file) {
+  return file.size <= MAX_SHARED_FILE_BYTES && (SHARED_FILE_TYPE.test(file.type || '') || SHARED_FILE_EXT.test(file.name || ''));
+}
 const ASSETS = [
   '/',
   '/index.html',
@@ -42,7 +49,7 @@ self.addEventListener('fetch', (event) => {
           if (typeof value === 'string' && value) params.set('shared_' + key, value);
         });
         const file = form.get('media');
-        if (file && typeof file !== 'string' && file.size > 0) {
+        if (file && typeof file !== 'string' && file.size > 0 && isAcceptedSharedFile(file)) {
           const cache = await caches.open(SHARED_CACHE);
           await cache.put('/shared-file', new Response(file, {
             headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name || 'arquivo') }

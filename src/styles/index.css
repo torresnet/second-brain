@@ -648,6 +648,7 @@ kbd {
 #input-file-title-hint { margin-top: .6rem; }
 .capture-status { padding: .65rem .8rem; border-radius: var(--radius-sm); font-size: 13px; }
 .capture-status.error { background: var(--danger-soft); color: var(--danger); }
+.capture-status.warn { background: var(--warn-soft); color: var(--warn); margin-bottom: .75rem; }
 
 /* ---------- Barra de comando ---------- */
 .palette-overlay {

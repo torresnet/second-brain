@@ -1,5 +1,6 @@
 import { APP_CONFIG } from '../constants/config.js';
 import { icon } from './icons.js';
+import { buildObsidianMarkdown } from './obsidianExport.js';
 
 /**
  * Formata timestamp ISO para exibição amigável em português
@@ -45,67 +46,16 @@ export function getStageBadge(stage) {
 }
 
 /**
- * Gera o conteúdo em formato Markdown enriquecido com frontmatter e Callouts do Obsidian
- * Compatível com os padrões de 'Obsidian-Templates', 'zk' e 'eugeniughelbur/obsidian-second-brain'
+ * Gera o conteúdo em formato Markdown enriquecido com frontmatter e Callouts do Obsidian.
+ * O escape do conteúdo (YAML, links, blocos executáveis) fica em obsidianExport.js.
  */
 export function generateMarkdownForObsidian(item) {
-  const tagsFormatted = Array.isArray(item.tags) ? item.tags.map(t => `  - ${t}`).join('\n') : '';
-  const takeaways = Array.isArray(item.key_takeaways) 
-    ? item.key_takeaways.map(t => `- [ ] ${t}`).join('\n') 
-    : '- [ ] Nenhum ponto chave catalogado.';
-
-  const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
-  const examplesSection = examples.length
-    ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${e.title}\n${e.scenario ? `**Cenário:** ${e.scenario}\n\n` : ''}${e.how}`).join('\n\n')}\n\n---\n\n`
-    : '';
-
-  // Notas antigas ainda podem ter ações; novas notas não geram mais esta seção
-  const legacyActions = Array.isArray(item.action_items) ? item.action_items : [];
-  const actionsSection = legacyActions.length
-    ? `## ⚡ Próximas Ações Práticas (GTD)\n${legacyActions.map(a => `- [ ] ${a}`).join('\n')}\n\n---\n\n`
-    : '';
-
-  const entitiesFormatted = Array.isArray(item.entities) && item.entities.length > 0
-    ? item.entities.map(e => `[[${e}]]`).join(', ')
-    : 'Nenhuma entidade direta.';
-
-  const stage = item.stage || 'budding';
-  const stageInfo = getStageBadge(stage);
-
-  return `---
-title: "${item.title.replace(/"/g, '\\"')}"
-date: ${item.created_at || new Date().toISOString()}
-type: ${item.source_type}
-stage: ${stage}
-url: "${item.source_url || ''}"
-tags:
-${tagsFormatted || '  - segundo-cerebro'}
----
-
-# ${item.title}
-
-> [!INFO] Metadados da Nota
-> - **Tipo:** ${item.source_type.toUpperCase()}
-> - **Estágio:** ${stageInfo.icon} ${stageInfo.label}
-> - **Origem:** [Link da Fonte](${item.source_url || '#'})
-> - **Entidades / Conceitos Relacionados:** ${entitiesFormatted}
-> - **Catalogado em:** ${formatDateBR(item.created_at)}
-
----
-
-> [!ABSTRACT] Resumo Executivo
-> ${item.summary || 'Sem resumo disponível.'}
-
----
-
-## 🎯 Pontos-Chave (Takeaways)
-${takeaways}
-
----
-
-${examplesSection}${actionsSection}## 📝 Transcrição & Conteúdo Integral
-${item.raw_content || 'Sem transcrição disponível.'}
-`;
+  const stageInfo = getStageBadge(item.stage || 'budding');
+  return buildObsidianMarkdown(item, {
+    stageIcon: stageInfo.icon,
+    stageLabel: stageInfo.label,
+    dateLabel: formatDateBR(item.created_at)
+  });
 }
 
 /**

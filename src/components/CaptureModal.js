@@ -19,6 +19,10 @@ export function createCaptureModal({ onSubmit }) {
       </div>
 
       <div class="modal-body">
+        <div id="capture-external-notice" class="capture-status warn" role="alert" hidden>
+          Este conteúdo veio de fora do app (link, compartilhamento ou outro site). Confira o endereço e o texto antes de salvar.
+        </div>
+
         <!-- Sub-abas de tipo de captura -->
         <div class="segmented" role="tablist">
           <button id="cap-tab-link" class="tab-btn active" type="button">${icon('link')}Link</button>
@@ -115,6 +119,7 @@ export function createCaptureModal({ onSubmit }) {
   const inputNoteTags = overlay.querySelector('#input-note-tags');
 
   const statusBox = overlay.querySelector('#capture-status-box');
+  const externalNotice = overlay.querySelector('#capture-external-notice');
 
   let activeMode = 'link'; // 'link' | 'note' | 'voice' | 'file'
   let mediaRecorder = null;
@@ -180,6 +185,7 @@ export function createCaptureModal({ onSubmit }) {
     } else if (prefilled.mode) {
       switchTab(prefilled.mode);
     }
+    externalNotice.hidden = !prefilled.external;
     overlay.classList.add('active');
     const firstField = { link: inputUrl, note: inputNoteBody, file: inputFileTitle }[activeMode];
     if (firstField) setTimeout(() => firstField.focus(), 50);
@@ -193,6 +199,7 @@ export function createCaptureModal({ onSubmit }) {
     inputNoteBody.value = '';
     inputNoteTags.value = '';
     inputFile.value = '';
+    externalNotice.hidden = true;
     inputFileTitle.value = '';
     setSelectedFile(null);
     statusBox.style.display = 'none';

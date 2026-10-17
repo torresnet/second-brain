@@ -1,0 +1,100 @@
+// Monta o .md exportado para o Obsidian. O conteúdo vem de páginas externas (via IA), então
+// nada é gravado cru: frontmatter com escape YAML e blocos executáveis por plugins neutralizados.
+
+const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f\u2028\u2029]+', 'g');
+const oneLine = (value) => String(value ?? '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim();
+
+/** Texto como string YAML entre aspas (JSON é YAML válido): sem quebra de linha, aspas ou chaves injetadas. */
+export function yamlString(value) {
+  return JSON.stringify(oneLine(value));
+}
+
+/** Só http/https; devolve '' para qualquer outra coisa (javascript:, data:, file:...). */
+export function safeHttpUrl(value) {
+  const text = oneLine(value);
+  if (!/^https?:\/\//i.test(text)) return '';
+  try {
+    return new URL(text).toString();
+  } catch {
+    return '';
+  }
+}
+
+const markdownLinkTarget = (url) => url.replace(/[()\s<>]/g, (c) => encodeURIComponent(c));
+
+const EXECUTABLE_FENCE = /^(\s*(?:`{3,}|~{3,})\s*)(dataviewjs|dataview|js|javascript|jsx|ts|typescript|templater|button|query|tasks|meta-?bind|custom-?js|run|chart)\b/gim;
+
+/** Impede que o texto capturado vire código executável em plugins (Dataview JS, Templater, CustomJS...). */
+export function neutralizeExecutable(text) {
+  return String(text ?? '')
+    .replace(EXECUTABLE_FENCE, '$1text $2')
+    .replace(/<%/g, '< %')
+    .replace(/`(\$?=)/g, '`​$1');
+}
+
+const quoteBlock = (text) => String(text ?? '').split(/\r?\n/).map((line) => `> ${line}`).join('\n');
+
+export function buildObsidianMarkdown(item, { stageIcon, stageLabel, dateLabel }) {
+  const title = oneLine(item.title) || 'Sem título';
+  const sourceType = oneLine(item.source_type) || 'note';
+  const stage = oneLine(item.stage) || 'budding';
+  const url = safeHttpUrl(item.source_url);
+
+  const tags = Array.isArray(item.tags) && item.tags.length
+    ? item.tags.map((t) => `  - ${yamlString(t)}`).join('\n')
+    : `  - ${yamlString('segundo-cerebro')}`;
+
+  const takeaways = Array.isArray(item.key_takeaways)
+    ? item.key_takeaways.map((t) => `- [ ] ${oneLine(t)}`).join('\n')
+    : '- [ ] Nenhum ponto chave catalogado.';
+
+  const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+  const examplesSection = examples.length
+    ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${oneLine(e.title)}\n${e.scenario ? `**Cenário:** ${neutralizeExecutable(e.scenario)}\n\n` : ''}${neutralizeExecutable(e.how)}`).join('\n\n')}\n\n---\n\n`
+    : '';
+
+  const legacyActions = Array.isArray(item.action_items) ? item.action_items : [];
+  const actionsSection = legacyActions.length
+    ? `## ⚡ Próximas Ações Práticas (GTD)\n${legacyActions.map((a) => `- [ ] ${oneLine(a)}`).join('\n')}\n\n---\n\n`
+    : '';
+
+  const entities = Array.isArray(item.entities)
+    ? item.entities.map((e) => String(e ?? '').replace(/[\[\]|#^\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean)
+    : [];
+  const entitiesFormatted = entities.length ? entities.map((e) => `[[${e}]]`).join(', ') : 'Nenhuma entidade direta.';
+
+  return `---
+title: ${yamlString(title)}
+date: ${yamlString(item.created_at || new Date().toISOString())}
+type: ${yamlString(sourceType)}
+stage: ${yamlString(stage)}
+url: ${yamlString(url)}
+tags:
+${tags}
+---
+
+# ${title}
+
+> [!INFO] Metadados da Nota
+> - **Tipo:** ${sourceType.toUpperCase()}
+> - **Estágio:** ${stageIcon} ${stageLabel}
+> - **Origem:** ${url ? `[Link da Fonte](${markdownLinkTarget(url)})` : 'sem link'}
+> - **Entidades / Conceitos Relacionados:** ${entitiesFormatted}
+> - **Catalogado em:** ${dateLabel}
+
+---
+
+> [!ABSTRACT] Resumo Executivo
+${quoteBlock(neutralizeExecutable(item.summary || 'Sem resumo disponível.'))}
+
+---
+
+## 🎯 Pontos-Chave (Takeaways)
+${takeaways}
+
+---
+
+${examplesSection}${actionsSection}## 📝 Transcrição & Conteúdo Integral
+${neutralizeExecutable(item.raw_content || 'Sem transcrição disponível.')}
+`;
+}

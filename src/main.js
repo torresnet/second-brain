@@ -28,6 +28,7 @@ import { createCommandPalette } from './components/CommandPalette.js';
 import { createFeedFilters } from './components/FeedFilters.js';
 import { createReviewStrip } from './components/ReviewStrip.js';
 import { takeSharedFile } from './shared/services/captureService.js';
+import { parseSharedParams } from './shared/utils/sharedParams.js';
 import { createCaptureQueue } from './shared/services/captureQueue.js';
 import { executeCapture } from './shared/services/captureExecutor.js';
 import { setupThemeToggle } from './shared/services/theme.js';
@@ -480,19 +481,16 @@ document.addEventListener('keydown', (e) => {
  * Tratamento de Compartilhamento Direto via Web Share Target do Celular
  */
 async function checkSharedParams() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const sharedUrl = urlParams.get('shared_url') || urlParams.get('url');
-  const sharedTitle = urlParams.get('shared_title') || urlParams.get('title');
-  const sharedText = urlParams.get('shared_text') || urlParams.get('text');
-  const hasSharedFile = urlParams.get('shared_file') === '1';
+  const shared = parseSharedParams(window.location.search);
 
-  if (sharedUrl || sharedText || hasSharedFile) {
-    const sharedFile = hasSharedFile ? await takeSharedFile().catch(() => null) : null;
+  if (shared.hasAny) {
+    const sharedFile = shared.hasFile ? await takeSharedFile().catch(() => null) : null;
     captureModal.open({
-      url: sharedUrl,
-      title: sharedTitle,
-      text: sharedText,
-      file: sharedFile
+      url: shared.url,
+      title: shared.title,
+      text: shared.text,
+      file: sharedFile,
+      external: true
     });
     // Limpa a URL na barra de endereços sem recarregar a página
     window.history.replaceState({}, document.title, window.location.pathname);
