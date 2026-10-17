@@ -145,3 +145,21 @@ test('dismissJob remove o aviso da lista e subscribe é notificado', async () =>
   assert.ok(seen.includes(1));
   assert.equal(seen.at(-1), 0);
 });
+
+test('tarefa avulsa (run) roda em segundo plano, avisa o resultado e atualiza o acervo', async () => {
+  const { queue, calls } = setup();
+  await queue.enqueue({ kind: 'task', label: 'Reprocessando', run: async () => ({ message: 'Nota reprocessada.', warning: false }) }).done;
+  const [job] = queue.getSnapshot().jobs;
+  assert.equal(job.status, 'done');
+  assert.equal(job.message, 'Nota reprocessada.');
+  assert.equal(calls.execute.length, 0);
+  assert.equal(calls.saved, 1);
+});
+
+test('tarefa avulsa que falha vira erro visível', async () => {
+  const { queue } = setup();
+  await queue.enqueue({ kind: 'task', label: 'Reprocessando', run: async () => { throw new Error('IA indisponível'); } }).done;
+  const [job] = queue.getSnapshot().jobs;
+  assert.equal(job.status, 'error');
+  assert.equal(job.message, 'IA indisponível');
+});

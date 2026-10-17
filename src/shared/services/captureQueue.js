@@ -5,6 +5,8 @@ const ALERTS_KEY = 'sb.capture.alerts';
  * (pipeline de IA, uploads) continua aqui, independente de qualquer tela.
  * Links já salvos não são gravados: viram alertas aguardando a decisão do usuário.
  *
+ * Também aceita tarefas avulsas ({ kind: 'task', label, run }), como reprocessar uma nota.
+ *
  * Job: { id, kind, label, status: processing|done|warning|error|attention|skipped, message }
  * Alerta: { id, url, hint, label, existing: { id, title, created_at } }
  */
@@ -80,7 +82,7 @@ export function createCaptureQueue({ execute, findDuplicates, storage, onItemSav
         }
       }
 
-      const { message, warning } = await execute(spec);
+      const { message, warning } = await (spec.run ? spec.run() : execute(spec));
       patchJob(jobId, { status: warning ? 'warning' : 'done', message });
       if (onItemSaved) await onItemSaved();
     } catch (err) {

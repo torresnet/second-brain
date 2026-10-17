@@ -224,16 +224,7 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
       takeawaysSection.style.display = 'none';
     }
 
-    // Como aplicar na prática
-    const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
-    examplesList.innerHTML = examples.map((e, i) => `
-      <div class="example-card">
-        <div class="example-title"><span>${i + 1}</span>${escapeHtml(e.title)}</div>
-        ${e.scenario ? `<div class="example-scenario">${escapeHtml(e.scenario)}</div>` : ''}
-        <div class="example-how">${escapeHtml(e.how)}</div>
-        ${Array.isArray(e.uses) && e.uses.length ? `<div class="example-uses">${e.uses.map(u => `<span class="tag-item">${escapeHtml(u)}</span>`).join('')}</div>` : ''}
-      </div>`).join('');
-    examplesSection.style.display = examples.length ? 'block' : 'none';
+    renderExamples(item);
 
     // Ações Práticas (notas antigas)
     if (Array.isArray(item.action_items) && item.action_items.length > 0) {
@@ -342,6 +333,18 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
     if (btn && onOpenRelated) onOpenRelated(btn.dataset.id);
   });
 
+  function renderExamples(item) {
+    const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+    examplesList.innerHTML = examples.map((e, i) => `
+      <div class="example-card">
+        <div class="example-title"><span>${i + 1}</span>${escapeHtml(e.title)}</div>
+        ${e.scenario ? `<div class="example-scenario">${escapeHtml(e.scenario)}</div>` : ''}
+        <div class="example-how">${escapeHtml(e.how)}</div>
+        ${Array.isArray(e.uses) && e.uses.length ? `<div class="example-uses">${e.uses.map(u => `<span class="tag-item">${escapeHtml(u)}</span>`).join('')}</div>` : ''}
+      </div>`).join('');
+    examplesSection.style.display = examples.length ? 'block' : 'none';
+  }
+
   async function renderAtoms(item) {
     const hasStatus = typeof item.analysis_status === 'string';
     atomsSection.style.display = hasStatus ? 'block' : 'none';
@@ -403,6 +406,7 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
       const updated = await onReprocess(item.id);
       if (updated && currentItem && currentItem.id === item.id) {
         currentItem = updated;
+        renderExamples(updated);
         renderAtoms(updated);
       }
     } catch (err) {

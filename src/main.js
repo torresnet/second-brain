@@ -88,14 +88,32 @@ const detailModal = createItemDetailModal({
     if (item) detailModal.open(item);
   },
   onReprocess: async (id) => {
-    const result = await processItemKnowledge(id);
-    const outcome = result?.results?.[0] ?? result;
-    if (outcome?.status === 'not_found') throw new Error('A nota não existe mais.');
-    if (outcome?.status === 'busy') throw new Error('Este item já está sendo processado. Aguarde alguns minutos.');
-    if (outcome?.status === 'failed') {
-      throw new Error(outcome.warnings?.[0] || 'A indexação falhou. Tente novamente em instantes.');
-    }
-    refreshIndexBanner();
+    // Roda na fila de segundo plano: o aviso de sucesso/erro aparece mesmo se a ficha for fechada
+    const title = state.items.find(i => i.id === id)?.title || 'nota';
+    let failure = null;
+    await captureQueue.enqueue({
+      kind: 'task',
+      label: `Reprocessando: ${title}`,
+      run: async () => {
+        try {
+          const result = await processItemKnowledge(id);
+          const outcome = result?.results?.[0] ?? result;
+          if (outcome?.status === 'not_found') throw new Error('A nota não existe mais.');
+          if (outcome?.status === 'busy') throw new Error('Este item já está sendo processado. Aguarde alguns minutos.');
+          if (outcome?.status === 'failed') {
+            throw new Error(outcome.warnings?.[0] || 'A indexação falhou. Tente novamente em instantes.');
+          }
+          refreshIndexBanner();
+          return outcome?.status === 'partial'
+            ? { message: 'Indexada parcialmente. Abra a nota e tente de novo.', warning: true }
+            : { message: 'Nota reprocessada com sucesso.', warning: false };
+        } catch (err) {
+          failure = err;
+          throw err;
+        }
+      }
+    }).done;
+    if (failure) throw failure;
     return getBrainItemById(id);
   }
 });
