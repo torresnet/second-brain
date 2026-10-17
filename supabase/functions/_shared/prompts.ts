@@ -1,5 +1,6 @@
 // Prompts (em PT-BR) usados pelas funções. Ficam isolados para serem revisados e testados.
 
+import type { Atom } from './atoms.ts';
 import { truncate } from './text.ts';
 
 export interface PromptItem {
@@ -85,4 +86,31 @@ Para cada link devolva:
 - "kind": tipo livre em minúsculas sem acento (ferramenta, repositorio, biblioteca, documentacao, artigo, servico, curso...).
 
 Responda ESTRITAMENTE em JSON: {"pages":[{"n":1,"summary":"...","name":"...","kind":"..."}]}`;
+}
+
+export function buildExamplesPrompt(item: PromptItem, atoms: Atom[], useCases: string[]): string {
+  const inventory = atoms
+    .slice(0, 40)
+    .map(a => `- [${a.kind}] ${a.name}: ${truncate(a.explanation || a.contents_summary || '', 220)}${a.use_for ? ` | serve para: ${truncate(a.use_for, 160)}` : ''}${a.url ? ` | ${a.url}` : ''}`)
+    .join('\n');
+
+  return `Você ajuda a pessoa a LEMBRAR e USAR o que guardou no Segundo Cérebro dela. Com base SOMENTE no material abaixo, escreva exemplos práticos de como aplicar esse conhecimento, combinando as ferramentas, conceitos, códigos e ideias da nota.
+
+NOTA
+Título: ${item.title ?? '(sem título)'}
+Resumo: ${truncate(item.summary ?? '', 1500) || '(nenhum)'}
+Serve para: ${useCases.join('; ') || '(não informado)'}
+
+O QUE A NOTA CONTÉM
+${inventory || '(nenhum item extraído)'}
+
+REGRAS OBRIGATÓRIAS
+1. Escreva ATÉ 5 exemplos diferentes entre si. Pode ser menos de 5 e pode ser uma lista vazia: só inclua um exemplo se o material realmente sustentar.
+2. Cada exemplo deve combinar dois ou mais itens da nota quando fizer sentido (ex.: ferramenta A + conceito B), mostrando um uso concreto de ponta a ponta.
+3. NUNCA invente ferramentas, comandos, links, recursos ou números que não estão no material. Se faltar informação, escreva um exemplo mais simples ou omita.
+4. "title": curto e específico (o que a pessoa conseguiria fazer). "scenario": a situação real em que ela usaria. "how": como aplicar, em 2 a 4 frases com passos objetivos, citando os nomes dos itens da nota. "uses": nomes (exatos) dos itens da nota usados no exemplo.
+5. Tudo em português do Brasil. Nomes próprios, comandos e código ficam no original.
+
+Responda ESTRITAMENTE em JSON neste formato:
+{"examples":[{"title":"...","scenario":"...","how":"...","uses":["..."]}]}`;
 }

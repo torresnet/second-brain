@@ -13,6 +13,7 @@ Tudo o que o Supabase precisa para a memória externa fiel: banco, busca híbrid
 | Busca | RPC `search_brain` | Fusão de significado (vetor) + texto sem acento/plural + nome exato (RRF). |
 | Ligações entre notas | RPC `brain_item_links` | Notas que citam a mesma coisa (ferramenta, link, entidade) e notas de assunto parecido (vetor). Alimenta o grafo e "Notas relacionadas". |
 | Gravação | RPC `brain_replace_item_knowledge` | Troca átomos e trechos de um item numa única transação (tudo ou nada). |
+| Como aplicar | `brain_items.practical_examples`, RPC `brain_set_practical_examples` | Até 5 exemplos práticos (menos é válido) que combinam o conhecimento da nota. Gravados à parte: se falharem, o conhecimento já salvo não é afetado. |
 
 Funções (Edge Functions, Deno):
 
@@ -24,8 +25,8 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
 ## Publicar (nesta ordem)
 
 1. **Banco.** Antes, confira se `brain_chunks` não tem outra restrição que impeça vários trechos por item (a migração já remove UNIQUE só em `item_id`): `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.brain_chunks'::regclass;`. Pré-requisito: `supabase/auth_rls.sql` já executado. Depois aplique a migração, por uma das opções:
-   - `supabase db push --linked` (revise o arquivo antes), ou
-   - cole `migrations/20261017120000_knowledge_atoms.sql` no SQL Editor do Supabase.
+   - `supabase db push --linked` (revise os arquivos antes), ou
+   - cole no SQL Editor do Supabase, **nesta ordem**, `migrations/20261017120000_knowledge_atoms.sql` , `migrations/20261017130000_duplicates.sql` e `migrations/20261017140000_practical_examples.sql`.
 2. **Chave do Gemini** (a mesma usada no n8n; não vai para o repositório):
    ```bash
    supabase secrets set GEMINI_API_KEY=SUA_CHAVE --project-ref eicmqisneklcvhakvgce
@@ -46,6 +47,8 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
 **Apagar uma nota apaga o resto?** Sim: átomos, conteúdo lido dos links, trechos de busca e vetores da nota são apagados em cascata. Outras notas não são afetadas (cada nota tem a sua cópia dos itens). Confira com a consulta do passo 1 que `brain_chunks.item_id` mostra `ON DELETE CASCADE`; sem isso podem sobrar trechos soltos (invisíveis nas buscas, mas ocupando espaço).
 
 **Uma indexação incompleta apaga o que já estava bom?** Não. Se a nota já estava indexada e o reprocessamento terminar incompleto, o conhecimento anterior é mantido.
+
+**E se eu mandar um link repetido ou uma nota parecida?** Link repetido: o app avisa na hora e você escolhe (abrir a existente, salvar mesmo assim ou cancelar). Conteúdo muito parecido (mesmo link salvo antes, ou 90% ou mais de similaridade): a ficha da nota mostra "Possível duplicata" com os botões Ver a outra nota, Manter as duas, Mesclar e Apagar esta. Aulas e notas apenas do mesmo assunto não geram aviso; elas aparecem ligadas no grafo e em "Notas relacionadas". O limite de 90% é uma estimativa; para ajustar, mude `minSimilarity` em `getPossibleDuplicates` (`src/shared/services/supabaseClient.js`).
 
 ## Testes locais
 

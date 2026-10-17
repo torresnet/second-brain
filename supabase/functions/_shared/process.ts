@@ -3,9 +3,11 @@
 import { buildAtomChunkText, ensureCoverage, normalizeAtoms, normalizeKind } from './atoms.ts';
 import type { Atom } from './atoms.ts';
 import { crawlLink } from './crawl.ts';
+import { examplesSearchText, normalizeExamples } from './examples.ts';
+import type { PracticalExample } from './examples.ts';
 import type { SafeFetch } from './crawl.ts';
 import type { Gemini } from './gemini.ts';
-import { buildAtomizePrompt, buildLinkSummaryPrompt } from './prompts.ts';
+import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt } from './prompts.ts';
 import { chunkText, extractUrls, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
 
 export interface ItemRow {
@@ -44,6 +46,7 @@ export interface ProcessStore {
   getItem(id: string): Promise<ItemRow | null>;
   claim(id: string): Promise<boolean>;
   replace(args: ReplaceArgs): Promise<{ atoms: number; chunks: number }>;
+  saveExamples(id: string, examples: PracticalExample[]): Promise<void>;
   markFailed(id: string, message: string): Promise<void>;
 }
 
@@ -68,6 +71,7 @@ const MAX_LINKS_PER_ITEM = 5;
 const WINDOW_DEADLINE_MS = 95_000;
 const CRAWL_DEADLINE_MS = 85_000;
 const SUMMARY_DEADLINE_MS = 105_000;
+const EXAMPLES_DEADLINE_MS = 108_000;
 const CRAWL_CONCURRENCY = 4;
 const ATOMIZE_CONCURRENCY = 2;
 const MAX_CONTENT_CHUNKS = 400;
@@ -201,10 +205,22 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
       if (!a.explanation && a.contents_summary) a.explanation = a.contents_summary;
     }
 
-    // 5) trechos para busca
+    // 5) exemplos práticos que juntam o conhecimento da nota (falhar aqui nunca impede de salvar)
+    let examples: PracticalExample[] | null = null;
+    if (atoms.length && elapsed() <= EXAMPLES_DEADLINE_MS) {
+      try {
+        const out = (await gemini.generateJson(buildExamplesPrompt(item, atoms, useCases))) as { examples?: unknown };
+        if (Array.isArray(out?.examples)) examples = normalizeExamples(out.examples);
+      } catch (error) {
+        warnings.push(`Não foi possível gerar os exemplos práticos: ${errText(error)}`);
+      }
+    }
+
+    // 6) trechos para busca
     const summaryText = [
       title, item.summary, listText(item.key_takeaways),
       category ? `Categoria: ${category}` : '', useCases.length ? `Serve para: ${useCases.join('; ')}` : '',
+      examples?.length ? examplesSearchText(examples) : '',
       item.tags?.length ? `Tags: ${item.tags.join(', ')}` : ''
     ].filter(Boolean).join('\n');
 
@@ -224,7 +240,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     const vectorAt = new Map(toEmbed.map((plannedIndex, n) => [plannedIndex, embedded.vectors[n] ?? null]));
     const chunks: ChunkInput[] = planned.map((c, i) => ({ ...c, chunk_index: i, embedding: vectorAt.get(i) ?? null }));
 
-    // 6) gravação atômica
+    // 7) gravação atômica
     const partial = failedWindows > 0 || embedded.errors.length > 0;
     // reprocesso incompleto nunca apaga conhecimento anterior que estava bom
     if (partial && hadKnowledge) {
@@ -237,6 +253,14 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
       itemId, atoms, chunks, category, useCases, status,
       error: partial ? truncate(warnings.join(' | '), 500) : null
     });
+    // exemplos são extras: se falharem, o conhecimento já salvo continua valendo (e os exemplos anteriores ficam)
+    if (examples) {
+      try {
+        await store.saveExamples(itemId, examples);
+      } catch (error) {
+        warnings.push(`Não foi possível salvar os exemplos práticos: ${errText(error)}`);
+      }
+    }
     return { status, atoms: saved.atoms, chunks: saved.chunks, links, warnings };
   } catch (error) {
     const message = errText(error);

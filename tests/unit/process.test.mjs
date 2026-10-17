@@ -14,7 +14,7 @@ function item(overrides = {}) {
 }
 
 function fakeStore(row, { claim = true, replaceError = null } = {}) {
-  const calls = { replace: [], failed: [] };
+  const calls = { replace: [], failed: [], examples: [] };
   return {
     calls,
     getItem: async () => row,
@@ -24,11 +24,12 @@ function fakeStore(row, { claim = true, replaceError = null } = {}) {
       calls.replace.push(args);
       return { atoms: args.atoms.length, chunks: args.chunks.length };
     },
+    saveExamples: async (id, examples) => { calls.examples.push({ id, examples }); },
     markFailed: async (id, msg) => { calls.failed.push({ id, msg }); }
   };
 }
 
-function fakeGemini({ atomize, linkSummary, embedErrors = [], failAtomize = false } = {}) {
+function fakeGemini({ atomize, linkSummary, examples, embedErrors = [], failAtomize = false } = {}) {
   const calls = { prompts: [], embedTexts: [] };
   return {
     calls,
@@ -37,6 +38,10 @@ function fakeGemini({ atomize, linkSummary, embedErrors = [], failAtomize = fals
       if (prompt.includes('descreve o conteúdo de links')) {
         if (linkSummary instanceof Error) throw linkSummary;
         return linkSummary ?? { pages: [] };
+      }
+      if (prompt.includes('LEMBRAR e USAR')) {
+        if (examples instanceof Error) throw examples;
+        return examples ?? { examples: [] };
       }
       if (failAtomize) throw new Error('Gemini HTTP 429: cota');
       return typeof atomize === 'function' ? atomize(prompt) : atomize;
@@ -268,4 +273,48 @@ test('texto muito longo: todos os trechos entram na busca por texto, vetores só
   assert.ok(chunks.filter(c => c.chunk_type !== 'content').every(c => c.embedding));
   assert.deepEqual(chunks.map(c => c.chunk_index), chunks.map((_, i) => i));
   assert.equal(gemini.calls.embedTexts.length, chunks.filter(c => c.embedding).length);
+});
+
+test('exemplos práticos: até 5, normalizados, enviados à gravação e pesquisáveis', async () => {
+  const store = fakeStore(item({ raw_content: 'Use o Remotion em remotion.dev e o Motion Canvas.' }));
+  const many = Array.from({ length: 7 }, (_, i) => ({ title: `Exemplo ${i}`, scenario: 'cenário', how: `Use o Remotion no passo ${i}.`, uses: ['Remotion'] }));
+  const gemini = fakeGemini({ atomize: baseAtomize, examples: { examples: [...many, { title: '', how: 'sem título' }, null] } });
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'done');
+  const saved = store.calls.replace[0];
+  const savedExamples = store.calls.examples[0].examples;
+  assert.equal(savedExamples.length, 5);
+  assert.equal(savedExamples[0].title, 'Exemplo 0');
+  assert.deepEqual(savedExamples[0].uses, ['Remotion']);
+  const summary = saved.chunks.find(c => c.chunk_type === 'summary');
+  assert.match(summary.content, /Como aplicar na prática: Exemplo 0/);
+});
+
+test('exemplos práticos: menos de 5 (ou nenhum) é válido', async () => {
+  const store = fakeStore(item());
+  const gemini = fakeGemini({ atomize: baseAtomize, examples: { examples: [{ title: 'Só um', how: 'Faça assim.' }] } });
+  await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+  assert.equal(store.calls.examples[0].examples.length, 1);
+
+  const empty = fakeStore(item());
+  await processItem('item-1', { store: empty, gemini: fakeGemini({ atomize: baseAtomize }), safeFetch: okFetch, newId });
+  assert.deepEqual(empty.calls.examples[0].examples, []);
+});
+
+test('exemplos práticos: falha da IA vira aviso, não impede salvar e preserva os anteriores (null)', async () => {
+  const store = fakeStore(item());
+  const gemini = fakeGemini({ atomize: baseAtomize, examples: new Error('Gemini HTTP 503') });
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+  assert.equal(result.status, 'done');
+  assert.equal(store.calls.examples.length, 0);
+  assert.ok(result.warnings.some(w => w.includes('exemplos práticos')));
+});
+
+test('exemplos práticos: resposta fora do formato é ignorada sem derrubar o processamento', async () => {
+  const store = fakeStore(item());
+  const gemini = fakeGemini({ atomize: baseAtomize, examples: { examples: 'texto solto' } });
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+  assert.equal(result.status, 'done');
+  assert.equal(store.calls.examples.length, 0);
 });

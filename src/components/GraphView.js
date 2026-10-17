@@ -138,7 +138,7 @@ export function createGraphView(container, { onSelectNode }) {
           links.push({ source: node, target: t, kind: 'tag' });
         }
         for (const entity of Array.isArray(item.entities) ? item.entities : []) {
-          const e = hub('ent-' + String(entity).toLowerCase(), '[[' + entity + ']]', 'entity', '#a855f7', 9, node);
+          const e = hub('ent-' + String(entity).toLowerCase(), String(entity), 'entity', '#a855f7', 9, node);
           links.push({ source: node, target: e, kind: 'entity' });
         }
       }

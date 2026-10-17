@@ -230,3 +230,28 @@ test('RLS habilitada e política do dono existente em brain_atoms', async () => 
   const p = await db.query(`select policyname from pg_policies where tablename = 'brain_atoms'`);
   assert.deepEqual(p.rows.map(x => x.policyname), ['brain_atoms_owner']);
 });
+
+test('exemplos práticos: grava, substitui, limpa e recusa formato inválido', async () => {
+  const item = await newItem();
+  const call = (examples) => db.query(
+    'select public.brain_set_practical_examples($1, $2::jsonb)',
+    [item, JSON.stringify(examples)]
+  );
+  const read = async () => (await db.query('select practical_examples from brain_items where id = $1', [item])).rows[0].practical_examples;
+
+  assert.deepEqual(await read(), []);
+  await call([{ title: 'A', scenario: 's', how: 'h', uses: ['x'] }]);
+  assert.equal((await read())[0].title, 'A');
+  await call([]);
+  assert.deepEqual(await read(), []);
+
+  await assert.rejects(call({ nao: 'array' }), /exemplos_invalidos/);
+  await assert.rejects(db.query('select public.brain_set_practical_examples($1, $2::jsonb)', [uuid(), '[]']), /item_nao_encontrado/);
+});
+
+test('reexecutar a migração 0.3 depois da dos exemplos não quebra a gravação', async () => {
+  await db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
+  const item = await newItem();
+  await replace(item, [], [{ chunk_type: 'summary', chunk_index: 0, content: 'a', embedding: null }]);
+  await db.query("select public.brain_set_practical_examples($1, '[]'::jsonb)", [item]);
+});

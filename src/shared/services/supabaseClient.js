@@ -285,3 +285,39 @@ export async function getItemLinks() {
   const { data, error } = await supabase.rpc('brain_item_links');
   return error ? [] : (data || []);
 }
+
+/**
+ * Já existe nota com este link? (compara o link normalizado: sem www, utm, barra final...)
+ * Devolve [] se a migração ainda não foi aplicada, para não impedir a captura.
+ */
+export async function findDuplicatesByUrl(url) {
+  const { data, error } = await supabase.rpc('brain_find_duplicates_by_url', { p_url: url });
+  return error ? [] : (data || []);
+}
+
+/**
+ * Notas com o mesmo link ou muito parecidas com esta (ainda sem decisão do usuário)
+ */
+export async function getPossibleDuplicates(itemId, minSimilarity = 0.9) {
+  const { data, error } = await supabase.rpc('brain_possible_duplicates', {
+    p_item_id: itemId,
+    p_min_similarity: minSimilarity
+  });
+  return error ? [] : (data || []);
+}
+
+/**
+ * "Manter as duas": o aviso deste par não aparece mais
+ */
+export async function setDuplicateDecision(itemA, itemB) {
+  const { error } = await supabase.rpc('brain_set_duplicate_decision', { p_a: itemA, p_b: itemB });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Junta a nota `removeId` na nota `keepId` (conteúdo, tags, entidades) e apaga `removeId`
+ */
+export async function mergeItems(keepId, removeId) {
+  const { error } = await supabase.rpc('brain_merge_items', { p_keep: keepId, p_remove: removeId });
+  if (error) throw new Error(error.message);
+}

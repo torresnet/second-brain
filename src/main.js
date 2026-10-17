@@ -9,6 +9,8 @@ import {
   getBrainItemById,
   getItemLinks,
   getPendingIndexCount,
+  findDuplicatesByUrl,
+  mergeItems,
   processItemKnowledge,
   processPendingItems
 } from './shared/services/supabaseClient.js';
@@ -20,7 +22,11 @@ import { createCaptureModal } from './components/CaptureModal.js';
 import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
 import { createKnowledgeView } from './components/KnowledgeView.js';
+import { createAlertCenter } from './components/AlertCenter.js';
+import { createCaptureToasts } from './components/CaptureToasts.js';
 import { takeSharedFile } from './shared/services/captureService.js';
+import { createCaptureQueue } from './shared/services/captureQueue.js';
+import { executeCapture } from './shared/services/captureExecutor.js';
 
 // Estado da Aplicação
 const state = {
@@ -66,6 +72,17 @@ const detailModal = createItemDetailModal({
     }
   },
   getRelated: (id) => relatedFor(id),
+  onMerge: async (keepId, removeId) => {
+    await mergeItems(keepId, removeId);
+    detailModal.close();
+    await loadDashboardData();
+    const kept = await getBrainItemById(keepId);
+    if (kept) detailModal.open(kept);
+    // reindexa em segundo plano para os itens extraídos refletirem o conteúdo mesclado
+    processItemKnowledge(keepId)
+      .catch(() => null)
+      .finally(() => { loadDashboardData(); });
+  },
   onOpenRelated: async (id) => {
     const item = await getBrainItemById(id).catch(() => null);
     if (item) detailModal.open(item);
@@ -83,10 +100,30 @@ const detailModal = createItemDetailModal({
   }
 });
 
+// Capturas rodam em segundo plano: o modal só entrega o pedido e fecha
+const captureQueue = createCaptureQueue({
+  execute: executeCapture,
+  findDuplicates: findDuplicatesByUrl,
+  storage: window.localStorage,
+  onItemSaved: () => loadDashboardData()
+});
+
 const captureModal = createCaptureModal({
-  onItemSaved: async () => {
-    await loadDashboardData();
+  onSubmit: (spec) => captureQueue.enqueue(spec)
+});
+
+createCaptureToasts(captureQueue);
+createAlertCenter(document.getElementById('alert-center-mount'), captureQueue, {
+  onOpenItem: async (id) => {
+    const item = await getBrainItemById(id).catch(() => null);
+    if (item) detailModal.open(item);
   }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (!captureQueue.hasActive()) return;
+  e.preventDefault();
+  e.returnValue = '';
 });
 
 // Inicialização do Chat RAG

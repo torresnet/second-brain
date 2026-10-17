@@ -1,16 +1,11 @@
-import { insertBrainItem } from '../shared/services/supabaseClient.js';
 import {
-  isPipelineConfigured,
-  sendToPipeline,
-  readFileAsBase64,
-  recordingToWav,
   splitSharedText,
   MAX_FILE_BYTES,
   MAX_RECORD_SECONDS,
   ACCEPTED_FILE_TYPES
 } from '../shared/services/captureService.js';
 
-export function createCaptureModal({ onItemSaved }) {
+export function createCaptureModal({ onSubmit }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'capture-modal';
@@ -286,166 +281,50 @@ export function createCaptureModal({ onItemSaved }) {
     }
   });
 
-  function showSuccess(message, isWarning = false) {
+  function showError(message) {
     statusBox.style.display = 'block';
-    statusBox.style.background = isWarning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)';
-    statusBox.style.color = isWarning ? '#fbbf24' : '#34d399';
-    statusBox.innerText = message;
-
-    setTimeout(() => {
-      close();
-      if (onItemSaved) onItemSaved();
-    }, isWarning ? 5000 : 900);
+    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+    statusBox.style.color = '#f87171';
+    statusBox.innerText = `Erro: ${message}`;
   }
 
-  function reportPipelineResult(result, successMessage) {
-    if (result && result.analysis_ok === false) {
-      const reasons = (result.warnings || []).join(' ');
-      showSuccess(`⚠️ Salvo na caixa de entrada, mas a IA não conseguiu analisar tudo. ${reasons}`.trim(), true);
-    } else {
-      showSuccess(successMessage);
+  // Valida na hora e devolve o pedido de captura; o processamento acontece em segundo plano
+  function buildCaptureSpec() {
+    if (activeMode === 'link') {
+      const url = inputUrl.value.trim();
+      if (!url) throw new Error('Por favor, informe a URL.');
+      if (!/^https?:\/\//i.test(url)) throw new Error('Informe uma URL começando com http:// ou https://.');
+      return { kind: 'link', label: url.replace(/^https?:\/\//, '').slice(0, 60), url, hint: inputTitleHint.value.trim() };
     }
+
+    if (activeMode === 'note') {
+      const body = inputNoteBody.value.trim();
+      if (!body) throw new Error('O corpo da anotação não pode ficar vazio.');
+      const title = inputNoteTitle.value.trim() || 'Nota Rápida';
+      const tags = inputNoteTags.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      return { kind: 'note', label: title, title, body, tags };
+    }
+
+    if (activeMode === 'file') {
+      if (!selectedFile) throw new Error('Escolha um arquivo para anexar.');
+      if (selectedFile.size > MAX_FILE_BYTES) throw new Error('O arquivo excede o limite de 10 MB.');
+      return { kind: 'file', label: selectedFile.name, file: selectedFile, hint: inputFileTitle.value.trim() };
+    }
+
+    if (!recordedBlob) throw new Error('Grave um áudio antes de salvar.');
+    return { kind: 'voice', label: 'Gravação de voz', blob: recordedBlob, seconds: recordSeconds };
   }
 
-  // Salvar
-  submitBtn.addEventListener('click', async () => {
-    submitBtn.disabled = true;
-    submitBtn.innerText = 'Processando...';
-    let pipelineWarning = '';
-
+  submitBtn.addEventListener('click', () => {
+    let spec;
     try {
-      if (activeMode === 'link') {
-        const url = inputUrl.value.trim();
-        if (!url) throw new Error('Por favor, informe a URL.');
-
-        if (!/^https?:\/\//i.test(url)) throw new Error('Informe uma URL começando com http:// ou https://.');
-
-        if (isPipelineConfigured()) {
-          try {
-            const result = await sendToPipeline({ url, hint: inputTitleHint.value.trim() || undefined });
-            reportPipelineResult(result, '✅ Link analisado e catalogado pela IA!');
-            return;
-          } catch (pipelineErr) {
-            pipelineWarning = `⚠️ ${pipelineErr.message} Salvo na caixa de entrada sem análise.`;
-          }
-        }
-
-        let sourceType = 'article';
-        if (/instagram\.com\/(reel|p)\//i.test(url)) sourceType = 'reel';
-        else if (/youtu(be\.com|\.be)/i.test(url)) sourceType = 'youtube';
-        else if (/tiktok\.com/i.test(url)) sourceType = 'reel';
-        else if (/\.pdf/i.test(url)) sourceType = 'pdf';
-
-        const newItem = {
-          title: inputTitleHint.value.trim() || `Captura: ${url.replace(/^https?:\/\//, '').slice(0, 35)}...`,
-          summary: 'Item salvo para processamento cognitivo.',
-          source_type: sourceType,
-          source_url: url,
-          raw_content: `URL original capturada para indexação: ${url}`,
-          key_takeaways: ['Aguardando extração detalhada de tópicos pelo n8n'],
-          tags: [sourceType, 'inbox']
-        };
-
-        await insertBrainItem(newItem);
-
-      } else if (activeMode === 'note') {
-        const title = inputNoteTitle.value.trim() || 'Nota Rápida';
-        const body = inputNoteBody.value.trim();
-        if (!body) throw new Error('O corpo da anotação não pode ficar vazio.');
-
-        const tags = inputNoteTags.value
-          .split(',')
-          .map(t => t.trim().toLowerCase())
-          .filter(Boolean);
-
-        const newItem = {
-          title,
-          summary: body.slice(0, 180) + (body.length > 180 ? '...' : ''),
-          source_type: 'note',
-          source_url: null,
-          raw_content: body,
-          key_takeaways: [body.slice(0, 80)],
-          tags: tags.length ? tags : ['nota-pessoal']
-        };
-
-        await insertBrainItem(newItem);
-
-      } else if (activeMode === 'file') {
-        if (!selectedFile) throw new Error('Escolha um arquivo para anexar.');
-        if (selectedFile.size > MAX_FILE_BYTES) throw new Error('O arquivo excede o limite de 10 MB.');
-
-        const mime = selectedFile.type || 'application/octet-stream';
-        const titleHint = inputFileTitle.value.trim();
-
-        if (isPipelineConfigured()) {
-          try {
-            const result = await sendToPipeline({
-              file_base64: await readFileAsBase64(selectedFile),
-              file_mime: mime,
-              file_name: selectedFile.name,
-              hint: titleHint || undefined
-            });
-            reportPipelineResult(result, '✅ Arquivo analisado e catalogado pela IA!');
-            return;
-          } catch (pipelineErr) {
-            pipelineWarning = `⚠️ ${pipelineErr.message} Registrado na caixa de entrada sem análise.`;
-          }
-        }
-
-        const isText = mime.startsWith('text/');
-        const sourceType = mime === 'application/pdf' ? 'pdf' : mime.startsWith('audio/') ? 'audio' : 'note';
-        const textContent = isText ? (await selectedFile.text()).trim() : '';
-
-        await insertBrainItem({
-          title: titleHint || selectedFile.name,
-          summary: textContent ? textContent.slice(0, 180) + (textContent.length > 180 ? '...' : '') : `Arquivo anexado: ${selectedFile.name}`,
-          source_type: sourceType,
-          source_url: null,
-          raw_content: textContent || `Arquivo anexado (${mime}): ${selectedFile.name}. Conteúdo não processado.`,
-          key_takeaways: ['Aguardando extração detalhada pelo n8n'],
-          tags: [sourceType, 'arquivo', 'inbox']
-        });
-
-      } else if (activeMode === 'voice') {
-        if (!recordedBlob) throw new Error('Grave um áudio antes de salvar.');
-
-        if (isPipelineConfigured()) {
-          try {
-            const wav = await recordingToWav(recordedBlob);
-            const result = await sendToPipeline({
-              file_base64: await readFileAsBase64(wav),
-              file_mime: 'audio/wav',
-              file_name: 'voz.wav'
-            });
-            reportPipelineResult(result, '✅ Áudio transcrito e catalogado pela IA!');
-            return;
-          } catch (pipelineErr) {
-            pipelineWarning = `⚠️ ${pipelineErr.message} A gravação não foi transcrita.`;
-          }
-        }
-
-        await insertBrainItem({
-          title: `Áudio Gravado (${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`,
-          summary: `Gravação de voz com ${recordSeconds}s (não transcrita).`,
-          source_type: 'audio',
-          source_url: null,
-          raw_content: 'Áudio capturado pelo microfone, sem transcrição.',
-          key_takeaways: ['Gravação de voz sem análise da IA'],
-          tags: ['audio', 'voz', 'inbox']
-        });
-      }
-
-      showSuccess(pipelineWarning || '✅ Salvo com sucesso no seu Segundo Cérebro!', Boolean(pipelineWarning));
-
+      spec = buildCaptureSpec();
     } catch (err) {
-      statusBox.style.display = 'block';
-      statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
-      statusBox.style.color = '#f87171';
-      statusBox.innerText = `Erro: ${err.message}`;
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerText = 'Salvar no Cérebro ⚡';
+      showError(err.message);
+      return;
     }
+    onSubmit(spec);
+    close();
   });
 
   return { open, close };

@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.1] - 2026-10-17
+
+### Adicionado
+- **Duplicatas, com decisão do usuário.**
+  - Na captura: se o link já foi salvo (comparação normalizada: sem `www`, `utm_`, `#`, barra final; `youtu.be` = `youtube.com/watch?v=`), ele não é gravado e vira um alerta na **central de alertas** (sino no cabeçalho), com as decisões **Ver nota existente / Reprocessar e manter / Ignorar**. Os alertas sobrevivem a recarregar a página.
+  - Na ficha da nota: aviso de "Possível duplicata" (mesmo link ou conteúdo muito parecido, similaridade ≥ 90%) com os botões **Ver a outra nota / Manter as duas / Mesclar / Apagar esta**.
+  - "Manter as duas" é lembrado e o aviso não volta. "Mesclar" junta conteúdo, tags e entidades na nota mais antiga, registra a origem em `metadata.merged_sources`, apaga a outra e reindexa. Nada é apagado ou fundido sem confirmação.
+- **Captura em segundo plano.** Ao clicar em salvar (link, texto, voz ou arquivo) o modal fecha na hora e o processamento segue em segundo plano, com avisos temporários ("processando…", resultado ou erro) no canto da tela. O navegador avisa se a aba for fechada com capturas em andamento.
+- Migração `20261017130000_duplicates.sql` (função `brain_url_key`, coluna `source_key`, tabela `brain_duplicate_decisions`, RPCs de busca, decisão e mesclagem).
+- **Como aplicar na prática.** A IA escreve até 5 exemplos práticos (menos, ou nenhum, se a nota não sustentar) que combinam as ferramentas, conceitos e códigos da própria nota, sem inventar nada fora dela. Aparecem na ficha, entram na busca e na exportação Markdown. Substitui as "Próximas Ações", que deixam de ser geradas (notas antigas mantêm as suas).
+- Migração `20261017140000_practical_examples.sql` (coluna `practical_examples` e RPC `brain_set_practical_examples`). Reindexe a nota ("Reprocessar") para gerar os exemplos de notas antigas.
+
 ## [0.3.0] - 2026-10-17
 
 ### Adicionado

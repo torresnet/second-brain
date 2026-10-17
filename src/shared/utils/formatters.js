@@ -52,9 +52,16 @@ export function generateMarkdownForObsidian(item) {
     ? item.key_takeaways.map(t => `- [ ] ${t}`).join('\n') 
     : '- [ ] Nenhum ponto chave catalogado.';
 
-  const actionItems = Array.isArray(item.action_items) && item.action_items.length > 0
-    ? item.action_items.map(a => `- [ ] ${a}`).join('\n')
-    : '- [ ] Nenhuma ação prática imediata.';
+  const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+  const examplesSection = examples.length
+    ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${e.title}\n${e.scenario ? `**Cenário:** ${e.scenario}\n\n` : ''}${e.how}`).join('\n\n')}\n\n---\n\n`
+    : '';
+
+  // Notas antigas ainda podem ter ações; novas notas não geram mais esta seção
+  const legacyActions = Array.isArray(item.action_items) ? item.action_items : [];
+  const actionsSection = legacyActions.length
+    ? `## ⚡ Próximas Ações Práticas (GTD)\n${legacyActions.map(a => `- [ ] ${a}`).join('\n')}\n\n---\n\n`
+    : '';
 
   const entitiesFormatted = Array.isArray(item.entities) && item.entities.length > 0
     ? item.entities.map(e => `[[${e}]]`).join(', ')
@@ -94,12 +101,7 @@ ${takeaways}
 
 ---
 
-## ⚡ Próximas Ações Práticas (GTD)
-${actionItems}
-
----
-
-## 📝 Transcrição & Conteúdo Integral
+${examplesSection}${actionsSection}## 📝 Transcrição & Conteúdo Integral
 ${item.raw_content || 'Sem transcrição disponível.'}
 `;
 }

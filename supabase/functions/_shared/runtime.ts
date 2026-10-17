@@ -123,6 +123,10 @@ export function createProcessStore(supabase: SupabaseClient): ProcessStore {
       if (error) throw new Error(`Falha ao gravar o conhecimento: ${error.message}`);
       return data as { atoms: number; chunks: number };
     },
+    async saveExamples(id, examples) {
+      const { error } = await supabase.rpc('brain_set_practical_examples', { p_item_id: id, p_examples: examples });
+      if (error) throw new Error(error.message);
+    },
     async markFailed(id, message) {
       await supabase
         .from('brain_items')

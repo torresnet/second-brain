@@ -8,6 +8,13 @@ import { unaccent } from '@electric-sql/pglite/contrib/unaccent';
 export const MIGRATION_PATH = fileURLToPath(
   new URL('../../supabase/migrations/20261017120000_knowledge_atoms.sql', import.meta.url)
 );
+export const DUPLICATES_MIGRATION_PATH = fileURLToPath(
+  new URL('../../supabase/migrations/20261017130000_duplicates.sql', import.meta.url)
+);
+
+export const EXAMPLES_MIGRATION_PATH = fileURLToPath(
+  new URL('../../supabase/migrations/20261017140000_practical_examples.sql', import.meta.url)
+);
 
 // Reproduz o que já existe em produção antes da migração
 const BASE_SCHEMA = `
@@ -35,7 +42,11 @@ const BASE_SCHEMA = `
 export async function createDb({ applyMigration = true } = {}) {
   const db = new PGlite({ extensions: { vector, pg_trgm, unaccent } });
   await db.exec(BASE_SCHEMA);
-  if (applyMigration) await db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
+  if (applyMigration) {
+    await db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
+    await db.exec(readFileSync(DUPLICATES_MIGRATION_PATH, 'utf8'));
+    await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
+  }
   return db;
 }
 

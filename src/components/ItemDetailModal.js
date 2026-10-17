@@ -1,5 +1,5 @@
 import { formatDateBR, getMediaBadge, getStageBadge, downloadMarkdownFile, copyToClipboard } from '../shared/utils/formatters.js';
-import { getItemAtoms } from '../shared/services/supabaseClient.js';
+import { getItemAtoms, getPossibleDuplicates, setDuplicateDecision } from '../shared/services/supabaseClient.js';
 import { atomCardHtml } from './KnowledgeView.js';
 
 const ANALYSIS_LABELS = {
@@ -10,7 +10,7 @@ const ANALYSIS_LABELS = {
   failed: 'Falha na indexação'
 };
 
-export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpenRelated }) {
+export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpenRelated, onMerge }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'item-detail-modal';
@@ -37,10 +37,17 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
           </a>
         </div>
 
+        <!-- Possíveis duplicatas (com decisão do usuário) -->
+        <div id="modal-dup-section" style="display: none;">
+          <div class="dup-title">⚠️ Possível duplicata</div>
+          <div id="modal-dup-list"></div>
+          <div id="modal-dup-status" class="dup-status"></div>
+        </div>
+
         <!-- Seção: Entidades & Conceitos Relacionados (Inspirado em SamurAIGPT e Karpathy Wiki) -->
         <div id="modal-entities-section" style="display: none; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 0.75rem 1rem;">
           <div style="font-size: 0.8rem; font-weight: 600; color: #818cf8; margin-bottom: 0.35rem;">
-            🧬 Entidades & Conceitos Vinculados ([[Wikilinks]])
+            🧬 Entidades & Conceitos Vinculados
           </div>
           <div id="modal-entities-container" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
         </div>
@@ -61,7 +68,15 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
           <ul id="modal-takeaways-list" style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"></ul>
         </div>
 
-        <!-- Seção: Ações Práticas / GTD (Inspirado em Mindwtr) -->
+        <!-- Seção: Como aplicar na prática (até 5 exemplos gerados pela IA) -->
+        <div id="modal-examples-section" style="display: none; background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-md); padding: 1rem 1.25rem;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: #fbbf24; margin-bottom: 0.5rem;">
+            💡 Como aplicar na prática
+          </div>
+          <div id="modal-examples-list" class="example-list"></div>
+        </div>
+
+        <!-- Seção: Ações Práticas (notas antigas; novas notas não geram mais) -->
         <div id="modal-actions-section" style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-md); padding: 1rem 1.25rem; display: none;">
           <div style="font-size: 0.85rem; font-weight: 600; color: #34d399; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
             ⚡ Próximas Ações Recomendadas (Next Actions)
@@ -140,9 +155,14 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
   const takeawaysSection = overlay.querySelector('#modal-takeaways-section');
   const takeawaysList = overlay.querySelector('#modal-takeaways-list');
 
+  const examplesSection = overlay.querySelector('#modal-examples-section');
+  const examplesList = overlay.querySelector('#modal-examples-list');
   const actionsSection = overlay.querySelector('#modal-actions-section');
   const actionsList = overlay.querySelector('#modal-actions-list');
 
+  const dupSection = overlay.querySelector('#modal-dup-section');
+  const dupList = overlay.querySelector('#modal-dup-list');
+  const dupStatus = overlay.querySelector('#modal-dup-status');
   const relatedSection = overlay.querySelector('#modal-related-section');
   const relatedList = overlay.querySelector('#modal-related-list');
   const atomsSection = overlay.querySelector('#modal-atoms-section');
@@ -182,10 +202,10 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
       linkContainer.style.display = 'none';
     }
 
-    // Entidades & Conceitos ([[Wikilinks]])
+    // Entidades & Conceitos
     if (Array.isArray(item.entities) && item.entities.length > 0) {
       entitiesContainer.innerHTML = item.entities
-        .map(e => `<span class="tag-item" style="color: #a5b4fc; background: rgba(99, 102, 241, 0.15);">[[${escapeHtml(e)}]]</span>`)
+        .map(e => `<span class="tag-item" style="color: #a5b4fc; background: rgba(99, 102, 241, 0.15);">${escapeHtml(e)}</span>`)
         .join('');
       entitiesSection.style.display = 'block';
     } else {
@@ -204,7 +224,18 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
       takeawaysSection.style.display = 'none';
     }
 
-    // Ações Práticas (GTD)
+    // Como aplicar na prática
+    const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+    examplesList.innerHTML = examples.map((e, i) => `
+      <div class="example-card">
+        <div class="example-title"><span>${i + 1}</span>${escapeHtml(e.title)}</div>
+        ${e.scenario ? `<div class="example-scenario">${escapeHtml(e.scenario)}</div>` : ''}
+        <div class="example-how">${escapeHtml(e.how)}</div>
+        ${Array.isArray(e.uses) && e.uses.length ? `<div class="example-uses">${e.uses.map(u => `<span class="tag-item">${escapeHtml(u)}</span>`).join('')}</div>` : ''}
+      </div>`).join('');
+    examplesSection.style.display = examples.length ? 'block' : 'none';
+
+    // Ações Práticas (notas antigas)
     if (Array.isArray(item.action_items) && item.action_items.length > 0) {
       actionsList.innerHTML = item.action_items
         .map(a => `<li style="display: flex; align-items: center; gap: 0.5rem;"><input type="checkbox" style="cursor: pointer; accent-color: #10b981;" /><span>${escapeHtml(a)}</span></li>`)
@@ -225,10 +256,75 @@ export function createItemDetailModal({ onDelete, onReprocess, getRelated, onOpe
       tagsContainer.innerHTML = '';
     }
 
+    renderDuplicates(item);
     renderRelated(item);
     renderAtoms(item);
     overlay.classList.add('active');
   }
+
+  async function renderDuplicates(item) {
+    dupSection.style.display = 'none';
+    dupList.innerHTML = '';
+    dupStatus.innerText = '';
+    const duplicates = await getPossibleDuplicates(item.id);
+    if (!currentItem || currentItem.id !== item.id || !duplicates.length) return;
+    dupSection.style.display = 'block';
+    dupList.innerHTML = duplicates.map(d => `
+      <div class="dup-card" data-id="${escapeHtml(d.id)}" data-created="${escapeHtml(d.created_at)}">
+        <div class="dup-text">
+          <strong>${escapeHtml(d.title || 'Sem título')}</strong>
+          <span>${d.reason === 'mesmo_link' ? 'mesmo link' : `${Math.round(d.similarity * 100)}% parecida`} · salva em ${escapeHtml(formatDateBR(d.created_at))}</span>
+        </div>
+        <div class="dup-actions">
+          <button type="button" class="pill-btn" data-dup="open">Ver a outra nota</button>
+          <button type="button" class="pill-btn" data-dup="keep">Manter as duas</button>
+          <button type="button" class="pill-btn" data-dup="merge" title="Junta o conteúdo das duas e mantém a nota mais antiga">Mesclar</button>
+          <button type="button" class="pill-btn dup-danger" data-dup="delete">Apagar esta</button>
+        </div>
+      </div>`).join('');
+  }
+
+  dupList.addEventListener('click', async (e) => {
+    const button = e.target.closest('[data-dup]');
+    const card = e.target.closest('.dup-card');
+    if (!button || !card || !currentItem) return;
+    const action = button.dataset.dup;
+    const otherId = card.dataset.id;
+    const otherTitle = card.querySelector('strong')?.textContent || 'a outra nota';
+    const item = currentItem;
+
+    if (action === 'open') {
+      if (onOpenRelated) onOpenRelated(otherId);
+      return;
+    }
+    if (action === 'delete') {
+      deleteBtn.click();
+      return;
+    }
+
+    const buttons = card.querySelectorAll('button');
+    try {
+      if (action === 'keep') {
+        buttons.forEach(b => { b.disabled = true; });
+        await setDuplicateDecision(item.id, otherId);
+        card.remove();
+        if (!dupList.children.length) dupSection.style.display = 'none';
+      } else if (action === 'merge' && onMerge) {
+        const otherIsOlder = new Date(card.dataset.created) < new Date(item.created_at);
+        const keep = otherIsOlder ? otherId : item.id;
+        const keepTitle = otherIsOlder ? otherTitle : item.title;
+        const removeTitle = otherIsOlder ? item.title : otherTitle;
+        const ok = confirm(`Juntar “${removeTitle}” em “${keepTitle}”?\n\nO conteúdo das duas fica na nota mais antiga e a outra é apagada. Isso não pode ser desfeito.`);
+        if (!ok) return;
+        buttons.forEach(b => { b.disabled = true; });
+        dupStatus.innerText = 'Mesclando…';
+        await onMerge(keep, otherIsOlder ? item.id : otherId);
+      }
+    } catch (err) {
+      buttons.forEach(b => { b.disabled = false; });
+      dupStatus.innerText = err.message;
+    }
+  });
 
   function renderRelated(item) {
     const related = getRelated ? getRelated(item.id) : [];
