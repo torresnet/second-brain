@@ -33,3 +33,8 @@ coolify_private_key.txt
 
 # Supabase CLI (estado local)
 supabase/.temp/
+
+# Artefatos de ferramentas e bytecode
+.playwright-mcp/
+__pycache__/
+*.pyc

@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Copia dependências e instala
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # URL do webhook do n8n (embutida no bundle em build time)
 ARG VITE_N8N_WEBHOOK_URL

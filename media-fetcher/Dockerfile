@@ -4,9 +4,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Versão fixa e revisada: para atualizar, altere aqui (ou passe --build-arg YTDLP_VERSION=...) e faça redeploy
+ARG YTDLP_VERSION=2026.8.19
+
 RUN useradd --create-home --uid 1000 app \
     && python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir -U "yt-dlp[default]" \
+    && /opt/venv/bin/pip install --no-cache-dir "yt-dlp[default]==${YTDLP_VERSION}" \
     && mkdir -p /data \
     && chown -R app:app /opt/venv /data
 
@@ -18,5 +21,4 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/health', timeout=3)"
 
-# yt-dlp quebra com frequência quando as plataformas mudam: atualiza a cada start
-CMD ["sh", "-c", "pip install --quiet -U 'yt-dlp[default]' || true; exec python /app/server.py"]
+CMD ["python", "/app/server.py"]
