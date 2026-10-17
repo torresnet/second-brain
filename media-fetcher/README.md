@@ -25,6 +25,12 @@ O Instagram bloqueia downloads anônimos com frequência ("login required"). Sol
 
 Sem cookies, posts públicos às vezes funcionam; quando não, o item é salvo com a legenda pública (se houver) e um aviso.
 
+## Segurança (SSRF)
+
+- O link é verificado antes do download (`preflight`): só http/https, portas 80/443, sem credenciais, todos os IPs públicos, e a cadeia de redirects (até 5) é revalidada com conexão fixada no IP. Se o destino não puder ser verificado, o download não roda.
+- **Limite conhecido:** depois do preflight, o `yt-dlp` resolve DNS e segue redirects por conta própria (DNS rebinding, manifestos HLS/DASH apontando para IP interno). O código sozinho não fecha isso. **Obrigatório na infra:** rodar o container em rede sem rota para a rede interna do Coolify e bloquear `169.254.169.254` (e demais faixas privadas) na saída, ou forçar a saída por um proxy que filtre destinos privados.
+- Testes: `python -m unittest media-fetcher/test_server.py`.
+
 ## Limites
 
 - Vídeo até 15 min com análise visual; acima disso (até 60 min) só o áudio é analisado.

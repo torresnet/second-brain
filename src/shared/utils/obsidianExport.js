@@ -2,7 +2,7 @@
 // nada é gravado cru: frontmatter com escape YAML e blocos executáveis por plugins neutralizados.
 
 const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f\u2028\u2029]+', 'g');
-const oneLine = (value) => String(value ?? '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim();
+const oneLine = (value) => neutralizeExecutable(String(value ?? '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim());
 
 /** Texto como string YAML entre aspas (JSON é YAML válido): sem quebra de linha, aspas ou chaves injetadas. */
 export function yamlString(value) {
@@ -22,7 +22,7 @@ export function safeHttpUrl(value) {
 
 const markdownLinkTarget = (url) => url.replace(/[()\s<>]/g, (c) => encodeURIComponent(c));
 
-const EXECUTABLE_FENCE = /^(\s*(?:`{3,}|~{3,})\s*)(dataviewjs|dataview|js|javascript|jsx|ts|typescript|templater|button|query|tasks|meta-?bind|custom-?js|run|chart)\b/gim;
+const EXECUTABLE_FENCE = /^([ \t>\-*+\d.]*(?:`{3,}|~{3,})[ \t]*)(dataviewjs|dataview|js|javascript|jsx|ts|typescript|templater|button|query|tasks|meta-?bind|custom-?js|run|chart)\b/gim;
 
 /** Impede que o texto capturado vire código executável em plugins (Dataview JS, Templater, CustomJS...). */
 export function neutralizeExecutable(text) {
@@ -59,7 +59,7 @@ export function buildObsidianMarkdown(item, { stageIcon, stageLabel, dateLabel }
     : '';
 
   const entities = Array.isArray(item.entities)
-    ? item.entities.map((e) => String(e ?? '').replace(/[\[\]|#^\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean)
+    ? item.entities.map((e) => neutralizeExecutable(String(e ?? '')).replace(/[\[\]|#^\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean)
     : [];
   const entitiesFormatted = entities.length ? entities.map((e) => `[[${e}]]`).join(', ') : 'Nenhuma entidade direta.';
 

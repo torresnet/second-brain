@@ -44,6 +44,19 @@ test('blocos executáveis por plugins do Obsidian são neutralizados no conteúd
   assert.ok(!md.includes('> ```dataviewjs'));
 });
 
+test('neutralização cobre fences aninhadas em citação/lista e todos os campos, sem corromper texto comum', () => {
+  const nested = neutralizeExecutable('> ```dataviewjs\n- ```js\n1. ~~~templater\n  ```button');
+  assert.equal(nested, '> ```text dataviewjs\n- ```text js\n1. ~~~text templater\n  ```text button');
+  assert.equal(neutralizeExecutable('```\nRun the tests\n```\nQuery planning\nChart of accounts'), '```\nRun the tests\n```\nQuery planning\nChart of accounts');
+  const md = buildObsidianMarkdown({
+    title: 'x <% tp.system.prompt() %>', source_type: 'note', key_takeaways: ['`$= dv.pages()`'], action_items: ['<% x %>'],
+    entities: ['<% e %>'], practical_examples: [{ title: '<% t %>', how: '> ```dataviewjs\nx' }], summary: '- ```dataviewjs\nx'
+  }, META);
+  assert.ok(!md.includes('<%'));
+  assert.ok(!md.includes('`$='));
+  assert.ok(!/^[>\-\s]*```dataviewjs/m.test(md));
+});
+
 test('entidades não quebram os wikilinks e itens de lista ficam em uma linha', () => {
   const md = buildObsidianMarkdown({ title: 't', source_type: 'note', entities: ['A]] [[B', 'ok'], key_takeaways: ['linha 1\n- [ ] injetada'], tags: ['x\ny'] }, META);
   assert.ok(md.includes('[[A B]]'));

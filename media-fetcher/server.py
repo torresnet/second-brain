@@ -29,7 +29,7 @@ YTDLP_TIMEOUT = 240
 FFMPEG_TIMEOUT = 300
 MAX_BODY_BYTES = 8192
 ALLOWED_PORTS = (80, 443)
-MAX_REDIRECTS = 3
+MAX_REDIRECTS = 5
 REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -136,7 +136,8 @@ def preflight(url):
     except FetchError:
         raise
     except (OSError, http.client.HTTPException):
-        return  # site fora do ar ou que bloqueia este cliente: o download decide
+        # Falha fechada: se não dá para verificar o destino, o yt-dlp (que resolve DNS e segue redirects sozinho) não roda
+        raise FetchError("Não foi possível verificar o link")
     resp.close()
     conn.close()
 

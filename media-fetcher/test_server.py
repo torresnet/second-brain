@@ -94,5 +94,17 @@ class RedirectTests(unittest.TestCase):
         self.assertEqual(final, "https://exemplo.com/video")
 
 
+class PreflightTests(unittest.TestCase):
+    def test_falha_de_conexao_bloqueia_em_vez_de_liberar_para_o_yt_dlp(self):
+        with mock.patch.object(server, "open_validated", side_effect=ConnectionResetError()):
+            with self.assertRaisesRegex(server.FetchError, "verificar"):
+                server.preflight("https://exemplo.com/video")
+
+    def test_destino_interno_continua_bloqueado(self):
+        with mock.patch("socket.getaddrinfo", addrinfo("10.0.0.5")):
+            with self.assertRaises(server.FetchError):
+                server.preflight("https://exemplo.com/video")
+
+
 if __name__ == "__main__":
     unittest.main()

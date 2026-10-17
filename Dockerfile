@@ -25,6 +25,9 @@ COPY security-headers.conf /etc/nginx/security-headers.conf
 # A CSP libera o n8n (connect-src) usando a origem da mesma URL embutida no bundle
 ARG VITE_N8N_WEBHOOK_URL
 RUN origin=$(printf '%s' "$VITE_N8N_WEBHOOK_URL" | sed -nE 's#^(https://[^/]+).*#\1#p') \
+    && if [ -n "$VITE_N8N_WEBHOOK_URL" ] && [ -z "$origin" ]; then \
+         echo "VITE_N8N_WEBHOOK_URL precisa começar com https:// (a CSP bloquearia a captura)" >&2; exit 1; \
+       fi \
     && sed -i "s#__N8N_ORIGIN__#${origin}#" /etc/nginx/security-headers.conf
 
 # Copia os arquivos compilados do build stage
