@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+- Ingestão multimodal completa: sites/artigos (texto extraído da página), YouTube (análise nativa do vídeo pelo Gemini), PDFs e arquivos do Google Drive/Docs/Dropbox por link, e Reels/posts do Instagram, TikTok e similares via novo serviço `media-fetcher/` (yt-dlp + ffmpeg).
+- Gravação de voz agora é transcrita pela IA (convertida para WAV no navegador); vídeo adicionado aos tipos de arquivo aceitos.
+- "Compartilhar" do celular passa a aceitar arquivos (Web Share Target com POST) e extrai o link de textos compartilhados.
+- O campo de título/contexto é enviado ao pipeline; avisos claros quando a IA não consegue acessar o conteúdo.
+
+### Corrigido
+- Erro HTTP 500 "invalid syntax" no nó do Gemini (corpo montado com `JSON.stringify`).
+- O app mostrava sucesso mesmo quando a análise falhava; o microfone permanecia ligado após a gravação.
+
 ## [0.2.1] - 2026-10-14
 
 ### Adicionado

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'second-brain-v1';
+const CACHE_NAME = 'second-brain-v2';
+const SHARED_CACHE = 'share-target-files';
 const ASSETS = [
   '/',
   '/index.html',
@@ -20,7 +21,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.filter((key) => key.startsWith('second-brain-') && key !== CACHE_NAME).map((key) => caches.delete(key))
       );
     })
   );
@@ -30,7 +31,33 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Redireciona o share-target para a página inicial com query parameters
+  // Compartilhar do celular (POST): guarda o arquivo recebido e abre o app com os demais campos
+  if (url.pathname === '/share-target' && event.request.method === 'POST') {
+    event.respondWith((async () => {
+      const params = new URLSearchParams();
+      try {
+        const form = await event.request.formData();
+        ['url', 'title', 'text'].forEach((key) => {
+          const value = form.get(key);
+          if (typeof value === 'string' && value) params.set('shared_' + key, value);
+        });
+        const file = form.get('media');
+        if (file && typeof file !== 'string' && file.size > 0) {
+          const cache = await caches.open(SHARED_CACHE);
+          await cache.put('/shared-file', new Response(file, {
+            headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name || 'arquivo') }
+          }));
+          params.set('shared_file', '1');
+        }
+      } catch (err) {
+        // Sem dados legíveis: abre o app normalmente
+      }
+      return Response.redirect('/?' + params.toString(), 303);
+    })());
+    return;
+  }
+
+  // Redireciona o share-target (GET) para a página inicial com query parameters
   if (url.pathname === '/share-target') {
     event.respondWith(
       Response.redirect('/?shared_url=' + encodeURIComponent(url.searchParams.get('url') || '') + 

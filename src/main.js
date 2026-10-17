@@ -14,6 +14,7 @@ import { createItemDetailModal } from './components/ItemDetailModal.js';
 import { createCaptureModal } from './components/CaptureModal.js';
 import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
+import { takeSharedFile } from './shared/services/captureService.js';
 
 // Estado da Aplicação
 const state = {
@@ -195,17 +196,20 @@ searchInput.addEventListener('input', (e) => {
 /**
  * Tratamento de Compartilhamento Direto via Web Share Target do Celular
  */
-function checkSharedParams() {
+async function checkSharedParams() {
   const urlParams = new URLSearchParams(window.location.search);
   const sharedUrl = urlParams.get('shared_url') || urlParams.get('url');
   const sharedTitle = urlParams.get('shared_title') || urlParams.get('title');
   const sharedText = urlParams.get('shared_text') || urlParams.get('text');
+  const hasSharedFile = urlParams.get('shared_file') === '1';
 
-  if (sharedUrl || sharedText) {
+  if (sharedUrl || sharedText || hasSharedFile) {
+    const sharedFile = hasSharedFile ? await takeSharedFile().catch(() => null) : null;
     captureModal.open({
       url: sharedUrl,
       title: sharedTitle,
-      text: sharedText
+      text: sharedText,
+      file: sharedFile
     });
     // Limpa a URL na barra de endereços sem recarregar a página
     window.history.replaceState({}, document.title, window.location.pathname);

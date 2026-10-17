@@ -38,6 +38,12 @@
               "name": "embeddingModel",
               "value": "gemini-embedding-001",
               "type": "string"
+            },
+            {
+              "id": "cfg-media-fetcher",
+              "name": "mediaFetcherUrl",
+              "value": "http://media-fetcher:8080",
+              "type": "string"
             }
           ]
         },
@@ -100,7 +106,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normalização e Classificação de Entrada\nconst body = $input.first().json.body || $input.first().json;\nlet url = body.url ? body.url.trim() : null;\nlet text = body.text ? body.text.trim() : null;\nlet fileBase64 = body.file_base64 || null;\nlet fileMime = body.file_mime || 'text/plain';\n\nlet sourceType = 'note';\nif (url) {\n  if (/instagram\\.com\\/(reel|p)\\//i.test(url)) {\n    sourceType = 'reel';\n  } else if (/youtu(be\\.com|\\.be)/i.test(url)) {\n    sourceType = 'youtube';\n  } else if (/tiktok\\.com/i.test(url)) {\n    sourceType = 'tiktok';\n  } else if (/\\.pdf($|\\?)/i.test(url)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'article';\n  }\n} else if (fileBase64) {\n  if (/audio/i.test(fileMime)) {\n    sourceType = 'audio';\n  } else if (/pdf/i.test(fileMime)) {\n    sourceType = 'pdf';\n  } else {\n    sourceType = 'document';\n  }\n}\n\nreturn [{\n  json: {\n    url,\n    text,\n    fileBase64,\n    fileMime,\n    sourceType,\n    rawInput: url || text || 'Arquivo binário recebido'\n  }\n}];"
+        "jsCode": "// Normaliza e classifica a entrada (link, texto ou arquivo) e escolhe a estratégia de extração\nconst body = $input.first().json.body || $input.first().json;\nlet url = body.url ? String(body.url).trim() : null;\nlet text = body.text ? String(body.text).trim() : null;\nconst hint = body.hint ? String(body.hint).trim() : null;\nlet fileBase64 = body.file_base64 || null;\nconst fileName = body.file_name ? String(body.file_name) : null;\nlet fileMime = body.file_mime ? String(body.file_mime).toLowerCase().split(';')[0].trim() : '';\n\n// Texto que é só um link (ex.: compartilhado pelo celular) vira link\nif (!url && text) {\n  const m = text.match(/^(https?:\\/\\/\\S+)$/i);\n  if (m) { url = m[1]; text = null; }\n}\n\nconst EXT_MIME = {\n  pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json',\n  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',\n  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac',\n  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mpeg: 'video/mpeg', avi: 'video/avi', '3gp': 'video/3gpp'\n};\nif (fileBase64 && (!fileMime || fileMime === 'application/octet-stream') && fileName) {\n  const ext = fileName.split('.').pop().toLowerCase();\n  if (EXT_MIME[ext]) fileMime = EXT_MIME[ext];\n}\n\nconst SOCIAL = /(^|\\.)(instagram\\.com|tiktok\\.com|facebook\\.com|fb\\.watch|fb\\.com|twitter\\.com|x\\.com|threads\\.net|vimeo\\.com|kwai\\.com|pinterest\\.[a-z.]+|reddit\\.com|twitch\\.tv|dailymotion\\.com)$/i;\nconst YOUTUBE = /(^|\\.)(youtube\\.com|youtu\\.be|youtube-nocookie\\.com)$/i;\n\nlet strategy = 'text';\nlet sourceType = 'note';\nif (fileBase64) {\n  strategy = 'upload';\n  if (fileMime.startsWith('audio/')) sourceType = 'audio';\n  else if (fileMime === 'application/pdf') sourceType = 'pdf';\n  else if (fileMime.startsWith('video/')) sourceType = 'reel';\n  else sourceType = 'note';\n} else if (url) {\n  let host = '';\n  try { host = new URL(url).hostname; } catch (e) { host = ''; }\n  if (YOUTUBE.test(host)) { strategy = 'youtube'; sourceType = 'youtube'; }\n  else if (SOCIAL.test(host)) { strategy = 'social'; sourceType = 'reel'; }\n  else { strategy = 'web'; sourceType = 'article'; }\n}\n\nreturn [{\n  json: {\n    url, text, hint, fileBase64, fileMime, fileName, strategy, sourceType,\n    rawInput: url || text || fileName || 'Arquivo recebido'\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -123,14 +129,16 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Você é o processador cognitivo de um Segundo Cérebro. Analise a entrada abaixo (Tipo: {{$json.sourceType}} | Conteúdo/URL: {{$json.rawInput}}).\\nSe for um Reels, YouTube ou link de artigo, analise o tema, a mensagem central, tópicos práticos e transcrição/resumo fiel.\\nSe for um áudio ou texto, processe as ideias centrais.\\n\\nIMPORTANTE: Responda ESTRITAMENTE em formato JSON com o seguinte schema:\\n{\\n  \\\"title\\\": \\\"Título curto e intuitivo em PT-BR\\\",\\n  \\\"summary\\\": \\\"Resumo executivo em 2 a 3 parágrafos claros\\\",\\n  \\\"key_takeaways\\\": [\\\"Ponto chave 1\\\", \\\"Ponto chave 2\\\"],\\n  \\\"action_items\\\": [\\\"Ação prática imediata 1\\\", \\\"Ação prática 2\\\"],\\n  \\\"entities\\\": [\\\"Pessoa/Empresa/Tecnologia 1\\\", \\\"Conceito 2\\\"],\\n  \\\"raw_content\\\": \\\"Transcrição ou síntese completa do material\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\", \\\"tag3\\\"]\\n}\"\n        }{{ $json.fileBase64 ? \",{\\\"inline_data\\\":{\\\"mime_type\\\":\\\"\" + $json.fileMime + \"\\\",\\\"data\\\":\\\"\" + $json.fileBase64 + \"\\\"}}\" : \"\" }}\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
-        "options": {},
+        "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
+        "options": {
+          "timeout": 300000
+        },
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [760, 300],
+      "position": [1640, 300],
       "id": "gemini-analysis",
       "name": "Credencial Gemini",
       "credentials": {
@@ -140,15 +148,19 @@
         }
       },
       "notes": "🔑 Credencial: Gemini API Key\n(Header Auth → Name: x-goog-api-key)",
-      "notesInFlow": true
+      "notesInFlow": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "// Extrai o JSON gerado pelo Gemini\nconst geminiResponse = $input.first().json;\nlet parsed = {};\ntry {\n  const rawText = geminiResponse.candidates[0].content.parts[0].text;\n  parsed = JSON.parse(rawText);\n} catch (e) {\n  parsed = {\n    title: 'Nota Capturada (' + new Date().toLocaleDateString('pt-BR') + ')',\n    summary: 'Processado automaticamente',\n    key_takeaways: [],\n    action_items: [],\n    entities: [],\n    raw_content: '',\n    tags: ['inbox']\n  };\n}\n\nconst prev = $('Classificar Entrada').first().json;\n\nreturn [{\n  json: {\n    title: parsed.title || 'Sem título',\n    summary: parsed.summary || '',\n    key_takeaways: parsed.key_takeaways || [],\n    action_items: parsed.action_items || [],\n    entities: parsed.entities || [],\n    raw_content: parsed.raw_content || '',\n    tags: parsed.tags || ['geral'],\n    stage: 'budding',\n    source_type: prev.sourceType,\n    source_url: prev.url,\n    text_for_embedding: (parsed.title || '') + ' ' + (parsed.summary || '') + ' ' + (parsed.tags || []).join(' ') + ' ' + (parsed.entities || []).join(' ')\n  }\n}];"
+        "jsCode": "// Extrai o JSON do Gemini; em qualquer falha devolve um item de caixa de entrada com aviso claro\r\nconst ctx = $('Montar Requisição Gemini').first().json;\r\nconst res = $input.first().json;\r\nconst problems = [...ctx.warnings];\r\n\r\nfunction tryParse(raw) {\r\n  const cleaned = String(raw).trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '');\r\n  try { return JSON.parse(cleaned); } catch (e) { /* tenta recortar o objeto */ }\r\n  const a = cleaned.indexOf('{');\r\n  const b = cleaned.lastIndexOf('}');\r\n  if (a >= 0 && b > a) { try { return JSON.parse(cleaned.slice(a, b + 1)); } catch (e) { return null; } }\r\n  return null;\r\n}\r\n\r\nlet parsed = null;\r\nlet rawText = '';\r\nif (res && res.error) {\r\n  const msg = res.error.message || (res.error.description) || JSON.stringify(res.error);\r\n  problems.push('Falha no Gemini: ' + String(msg).slice(0, 300));\r\n} else {\r\n  const cand = res && res.candidates && res.candidates[0];\r\n  rawText = (cand && cand.content && cand.content.parts || []).map(p => p.text || '').join('');\r\n  if (!rawText) {\r\n    const why = (res && res.promptFeedback && res.promptFeedback.blockReason) || (cand && cand.finishReason) || 'resposta vazia';\r\n    problems.push('O Gemini não retornou análise (' + why + ').');\r\n  } else {\r\n    parsed = tryParse(rawText);\r\n    if (!parsed) problems.push('A resposta do Gemini veio incompleta; conteúdo salvo sem estruturação.');\r\n  }\r\n}\r\n\r\nconst list = v => (Array.isArray(v) ? v.map(String) : []);\r\nconst analyzed = !!parsed && parsed.content_accessible !== false;\r\nif (parsed && parsed.content_accessible === false) problems.push('O conteúdo do link não estava acessível à IA.');\r\n\r\nconst fallbackTitle = ctx.meta.title || ctx.hint || (ctx.url ? ctx.url.replace(/^https?:\\/\\//, '').slice(0, 60) : 'Captura ' + new Date().toLocaleDateString('pt-BR'));\r\nconst p = parsed || {};\r\nconst title = p.title || fallbackTitle;\r\nconst summary = p.summary || (problems.length ? 'Sem análise automática: ' + problems.join(' ') : '');\r\nconst tags = list(p.tags).length ? list(p.tags) : ['inbox'];\r\nif (!analyzed && !tags.includes('inbox')) tags.push('inbox');\r\nconst bodyText = p.raw_content || (parsed ? '' : rawText) || ctx.meta.description || '';\r\nconst rawContent = ctx.fileName ? 'Conteúdo extraído do arquivo \"' + ctx.fileName + '\" (o arquivo original não é armazenado).' + String.fromCharCode(10, 10) + bodyText : bodyText;\r\nconst takeaways = list(p.key_takeaways);\r\nconst entities = list(p.entities);\r\n\r\nconst embedText = [title, summary, takeaways.join('. '), tags.join(' '), entities.join(' '), String(rawContent).slice(0, 4000)]\r\n  .filter(Boolean).join('\\n');\r\n\r\nreturn [{\r\n  json: {\r\n    title,\r\n    summary,\r\n    key_takeaways: takeaways,\r\n    action_items: list(p.action_items),\r\n    entities,\r\n    raw_content: String(rawContent),\r\n    tags,\r\n    stage: 'budding',\r\n    source_type: ctx.sourceType,\r\n    source_url: ctx.url,\r\n    text_for_embedding: embedText,\r\n    analysis_ok: analyzed,\r\n    warnings: problems,\r\n    metadata: { analysis_ok: analyzed, warnings: problems, author: ctx.meta.uploader || null, extracted_from_file: ctx.fileName || null }\r\n  }\r\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [980, 300],
+      "position": [1860, 300],
       "id": "parse-gemini-output",
       "name": "Parse Resposta Gemini"
     },
@@ -174,7 +186,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 300],
+      "position": [2080, 300],
       "id": "generate-embedding",
       "name": "Gerar Embedding",
       "credentials": {
@@ -209,14 +221,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n  \"summary\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.summary) }},\n  \"source_type\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_type) }},\n  \"source_url\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_url) }},\n  \"raw_content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.raw_content) }},\n  \"key_takeaways\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.key_takeaways) }},\n  \"action_items\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.action_items) }},\n  \"entities\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.entities) }},\n  \"stage\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.stage) }},\n  \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }},\n  \"metadata\": {}\n}",
+        "jsonBody": "={\n  \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n  \"summary\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.summary) }},\n  \"source_type\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_type) }},\n  \"source_url\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.source_url) }},\n  \"raw_content\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.raw_content) }},\n  \"key_takeaways\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.key_takeaways) }},\n  \"action_items\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.action_items) }},\n  \"entities\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.entities) }},\n  \"stage\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.stage) }},\n  \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }},\n  \"metadata\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.metadata) }}\n}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 300],
+      "position": [2300, 300],
       "id": "save-brain-item",
       "name": "Salvar no Supabase (brain_items)",
       "credentials": {
@@ -254,7 +266,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1640, 300],
+      "position": [2520, 300],
       "id": "save-brain-chunk",
       "name": "Salvar Embedding no Supabase",
       "credentials": {
@@ -269,19 +281,19 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Item catalogado com sucesso no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json.id}}\",\n    \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n    \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }}\n  }\n}",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"analysis_ok\": {{ $('Parse Resposta Gemini').first().json.analysis_ok }},\n  \"warnings\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.warnings) }},\n  \"message\": \"Item catalogado no Segundo Cérebro!\",\n  \"item\": {\n    \"id\": \"{{$('Salvar no Supabase (brain_items)').first().json.id}}\",\n    \"title\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.title) }},\n    \"tags\": {{ JSON.stringify($('Parse Resposta Gemini').first().json.tags) }}\n  }\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1860, 300],
+      "position": [2740, 300],
       "id": "respond-webhook",
       "name": "Resposta Webhook"
     },
     {
       "parameters": {
-        "content": "## 🔑 Credenciais necessárias (Header Auth)\n\n**Supabase Anon Key** → header `apikey`\nNós: Credencial Supabase, Salvar no Supabase (brain_items), Salvar Embedding no Supabase\n\n**Gemini API Key** → header `x-goog-api-key`\nNós: Credencial Gemini, Gerar Embedding\n\nApós importar, abra cada nó acima e selecione a credencial.",
-        "height": 260,
+        "content": "## 🔑 Credenciais necessárias (Header Auth)\n\n**Supabase Anon Key** → header `apikey`\nNós: Credencial Supabase, Salvar no Supabase (brain_items), Salvar Embedding no Supabase\n\n**Gemini API Key** → header `x-goog-api-key`\nNós: Credencial Gemini, Gerar Embedding\n\n**Media Fetcher Key** → header `X-Api-Key`\nNó: Media Fetcher (serviço `media-fetcher/`, necessário para Instagram/TikTok/vídeos grandes)\n\nTambém ajuste `mediaFetcherUrl` no nó Configuração.\nApós importar, abra cada nó acima e selecione a credencial.",
+        "height": 340,
         "width": 560
       },
       "type": "n8n-nodes-base.stickyNote",
@@ -289,6 +301,85 @@
       "position": [100, -200],
       "id": "sticky-credentials",
       "name": "Credenciais necessárias"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepara o conteúdo: upload, YouTube (por URL), páginas web, PDFs/arquivos por link e Google Drive\nconst INLINE_LIMIT = 14 * 1024 * 1024;\nconst MAX_PAGE_CHARS = 60000;\nconst BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';\nconst BOT_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uagent.php)';\n\nconst item = $input.first().json;\nconst out = { ...item, fileBase64: null, files: [], fileUri: null, pageText: '', meta: {}, warnings: [], needsFetcher: false, fetchUrl: null };\n\nfunction isInlineMime(mime) {\n  return /^(image|audio|video)\\//.test(mime) || mime === 'application/pdf' || mime.startsWith('text/');\n}\n\nfunction sniffMime(buf, declared, url) {\n  const head = buf.subarray(0, 12);\n  if (head.subarray(0, 4).toString('latin1') === '%PDF') return 'application/pdf';\n  if (head[0] === 0x89 && head[1] === 0x50) return 'image/png';\n  if (head[0] === 0xff && head[1] === 0xd8) return 'image/jpeg';\n  if (declared && declared !== 'application/octet-stream' && declared !== 'binary/octet-stream') return declared;\n  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();\n  const map = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', txt: 'text/plain', md: 'text/markdown' };\n  return map[ext] || declared || 'application/octet-stream';\n}\n\nfunction decodeEntities(s) {\n  return s\n    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;|&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n)))\n    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));\n}\n\nfunction metaTag(html, key) {\n  const re1 = new RegExp('<meta[^>]+(?:property|name)=[\"\\']' + key + '[\"\\'][^>]*content=[\"\\']([^\"\\']*)[\"\\']', 'i');\n  const re2 = new RegExp('<meta[^>]+content=[\"\\']([^\"\\']*)[\"\\'][^>]*(?:property|name)=[\"\\']' + key + '[\"\\']', 'i');\n  const m = html.match(re1) || html.match(re2);\n  return m ? decodeEntities(m[1]).trim() : '';\n}\n\nfunction extractHtml(html) {\n  const titleTag = (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '';\n  const meta = {\n    title: metaTag(html, 'og:title') || decodeEntities(titleTag).trim(),\n    description: metaTag(html, 'og:description') || metaTag(html, 'description'),\n    uploader: metaTag(html, 'author') || metaTag(html, 'og:site_name')\n  };\n  let body = html\n    .replace(/<!--[\\s\\S]*?-->/g, ' ')\n    .replace(/<(script|style|noscript|svg|template|iframe)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  const main = body.match(/<(article|main)[\\s\\S]*?<\\/\\1>/i);\n  if (main && main[0].length > 800) body = main[0];\n  else body = body.replace(/<(nav|header|footer|aside|form)[\\s\\S]*?<\\/\\1>/gi, ' ');\n  body = body\n    .replace(/<(br|\\/p|\\/div|\\/li|\\/h[1-6]|\\/tr|\\/section)[^>]*>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n  const text = decodeEntities(body).replace(/[ \\t\\f\\v]+/g, ' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return { meta, text: text.slice(0, MAX_PAGE_CHARS) };\n}\n\nasync function httpGet(url, ua, method) {\n  return this_helpers.httpRequest({\n    method: method || 'GET',\n    url,\n    headers: { 'User-Agent': ua, 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    ignoreHttpStatusCode: true,\n    json: false,\n    timeout: 60000\n  });\n}\nconst this_helpers = this.helpers;\n\nfunction youtubeUrl(url) {\n  let u;\n  try { u = new URL(url); } catch (e) { return null; }\n  let id = null;\n  if (/youtu\\.be$/i.test(u.hostname)) id = u.pathname.slice(1).split('/')[0];\n  else if (u.pathname === '/watch') id = u.searchParams.get('v');\n  else {\n    const m = u.pathname.match(/^\\/(?:shorts|live|embed|v)\\/([\\w-]{6,})/);\n    if (m) id = m[1];\n  }\n  return id ? 'https://www.youtube.com/watch?v=' + id : null;\n}\n\nfunction googleExportUrl(url) {\n  const drive = url.match(/drive\\.google\\.com\\/(?:file\\/d\\/|open\\?id=|uc\\?(?:[^#]*&)?id=)([\\w-]+)/i);\n  if (drive) return 'https://drive.usercontent.google.com/download?id=' + drive[1] + '&export=download&confirm=t';\n  const doc = url.match(/docs\\.google\\.com\\/(document|spreadsheets|presentation)\\/d\\/([\\w-]+)/i);\n  if (doc) return 'https://docs.google.com/' + doc[1] + '/d/' + doc[2] + '/export?format=pdf';\n  if (/dropbox\\.com/i.test(url)) return url.replace(/([?&])dl=0/, '$1dl=1');\n  return null;\n}\n\nfunction addFile(mime, base64) {\n  out.files.push({ mime, base64 });\n}\n\nfunction useBuffer(buf, mime, label) {\n  if (mime.startsWith('text/') || mime === 'application/json') {\n    out.pageText = buf.toString('utf8').slice(0, MAX_PAGE_CHARS);\n    return;\n  }\n  if (!isInlineMime(mime)) {\n    out.warnings.push('Formato não suportado para análise (' + mime + '). Converta para PDF, imagem, áudio, vídeo ou texto.');\n    return;\n  }\n  if (buf.length > INLINE_LIMIT) {\n    if (/^(video|audio)\\//.test(mime)) { out.needsFetcher = true; return; }\n    out.warnings.push((label || 'Arquivo') + ' maior que 14 MB: reduza o tamanho ou divida o arquivo.');\n    return;\n  }\n  addFile(mime, buf.toString('base64'));\n}\n\nasync function run() {\n  if (item.strategy === 'upload') {\n    const buf = Buffer.from(item.fileBase64 || '', 'base64');\n    useBuffer(buf, item.fileMime || 'application/octet-stream', 'Arquivo');\n    if (item.hint && !out.meta.title) out.meta.title = item.hint;\n    return;\n  }\n\n  if (item.strategy === 'youtube') {\n    const normalized = youtubeUrl(item.url);\n    if (normalized) out.fileUri = normalized;\n    else out.warnings.push('Link do YouTube sem vídeo específico (playlist/canal): cole o link de um vídeo.');\n    return;\n  }\n\n  if (item.strategy === 'social') {\n    out.needsFetcher = true;\n    out.fetchUrl = item.url;\n    try {\n      const r = await httpGet(item.url, BOT_UA);\n      const ct = String(r.headers['content-type'] || '');\n      if (ct.includes('html')) {\n        const page = extractHtml(Buffer.from(r.body).toString('utf8'));\n        out.meta = page.meta;\n      }\n    } catch (e) { /* meta é opcional */ }\n    return;\n  }\n\n  if (item.strategy === 'web') {\n    const direct = googleExportUrl(item.url);\n    const target = direct || item.url;\n    let r;\n    try {\n      r = await httpGet(target, BROWSER_UA);\n    } catch (e) {\n      out.warnings.push('Não foi possível acessar o link: ' + e.message);\n      return;\n    }\n    const status = r.statusCode || 200;\n    const buf = Buffer.from(r.body);\n    if (status >= 400) {\n      out.warnings.push('O link respondeu HTTP ' + status + (status === 403 || status === 401 ? ' (acesso restrito ou exige login).' : '.'));\n      return;\n    }\n    const declared = String(r.headers['content-type'] || '').split(';')[0].trim().toLowerCase();\n    const mime = sniffMime(buf, declared, target);\n    if (mime === 'text/html' || mime === 'application/xhtml+xml') {\n      if (direct) {\n        out.warnings.push('O arquivo do Google Drive/Docs não é público (\"qualquer pessoa com o link\") ou exige confirmação.');\n        if (/drive\\.usercontent|drive\\.google/.test(direct)) { out.needsFetcher = true; out.fetchUrl = direct; }\n        return;\n      }\n      const page = extractHtml(buf.toString('utf8'));\n      out.meta = page.meta;\n      out.pageText = page.text;\n      if (page.text.length < 300) {\n        out.warnings.push('A página tem pouco texto legível (pode carregar o conteúdo via JavaScript ou exigir login).');\n      }\n      return;\n    }\n    useBuffer(buf, mime, 'Arquivo');\n    if (out.needsFetcher) out.fetchUrl = target;\n    if (mime === 'application/pdf') out.sourceType = 'pdf';\n    else if (mime.startsWith('audio/')) out.sourceType = 'audio';\n    else if (mime.startsWith('video/')) out.sourceType = 'reel';\n    else if (mime.startsWith('image/')) out.sourceType = 'note';\n    return;\n  }\n}\n\nawait run();\nreturn [{ json: out }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300],
+      "id": "prepare-content",
+      "name": "Preparar Conteúdo"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "needs-fetcher-cond",
+              "leftValue": "={{ $json.needsFetcher }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [980, 300],
+      "id": "needs-fetcher",
+      "name": "Precisa do Media Fetcher?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração').first().json.mediaFetcherUrl }}/fetch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.fetchUrl }) }}",
+        "options": {
+          "timeout": 330000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 180],
+      "id": "media-fetcher",
+      "name": "Media Fetcher",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Media Fetcher Key"
+        }
+      },
+      "notes": "🔑 Credencial: Media Fetcher Key\n(Header Auth → Name: X-Api-Key)\nBaixa Reels/TikTok/vídeos grandes (yt-dlp + ffmpeg).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta o resultado do Media Fetcher (se houve) e monta o corpo da requisição ao Gemini\nconst MAX_INLINE_B64 = 18 * 1024 * 1024;\nconst prep = $('Preparar Conteúdo').first().json;\nconst input = $input.first().json;\nconst fromFetcher = !('needsFetcher' in input);\n\nconst warnings = [...prep.warnings];\nlet files = [...prep.files];\nlet meta = { ...prep.meta };\n\nif (fromFetcher) {\n  if (input.ok === true && Array.isArray(input.files) && input.files.length) {\n    files = files.concat(input.files);\n    const m = input.meta || {};\n    meta = {\n      title: m.title || meta.title || '',\n      description: m.description || meta.description || '',\n      uploader: m.uploader || meta.uploader || '',\n      duration: m.duration || 0\n    };\n    (input.notes || []).forEach(n => warnings.push(n));\n  } else {\n    const reason = (input && (input.error && (input.error.message || input.error))) || 'serviço de mídia indisponível';\n    warnings.push('Não foi possível baixar a mídia (' + String(reason).slice(0, 200) + ').');\n  }\n}\n\nlet total = 0;\nconst kept = [];\nfor (const f of files) {\n  if (total + f.base64.length > MAX_INLINE_B64) {\n    warnings.push('Parte da mídia foi ignorada por exceder o limite de análise.');\n    continue;\n  }\n  total += f.base64.length;\n  kept.push(f);\n}\n\nconst labels = { upload: 'arquivo enviado', youtube: 'vídeo do YouTube', social: 'post de rede social (Reels/vídeo/imagem)', web: 'link', text: 'anotação de texto' };\nconst lines = [];\nlines.push('Você é o processador cognitivo de um Segundo Cérebro pessoal. Analise TODO o material fornecido e devolva uma ficha completa em português do Brasil.');\nlines.push('');\nlines.push('Origem: ' + (labels[prep.strategy] || 'material') + (prep.url ? ' — ' + prep.url : ''));\nif (prep.hint) lines.push('Contexto informado pelo usuário: ' + prep.hint);\nif (meta.title) lines.push('Título da página/post: ' + meta.title);\nif (meta.uploader) lines.push('Autor/canal: ' + meta.uploader);\nif (meta.description) lines.push('Legenda/descrição: ' + meta.description);\nif (prep.text) lines.push('\\nTexto enviado pelo usuário:\\n' + prep.text);\nif (prep.pageText) lines.push('\\nConteúdo textual extraído da fonte:\\n\"\"\"\\n' + prep.pageText + '\\n\"\"\"');\nif (warnings.length) lines.push('\\nAvisos do sistema sobre o acesso ao conteúdo: ' + warnings.join(' | '));\nlines.push(`\nREGRAS:\n- Vídeo: assista e ouça tudo. Em raw_content, transcreva a fala fielmente (no idioma original) e descreva o que aparece (cenas, pessoas, objetos, textos/legendas/slides na tela).\n- Áudio: transcreva fielmente e identifique falantes quando possível.\n- Imagem/PDF: descreva, extraia todo o texto visível (OCR), tabelas e números.\n- Página web: use o texto fornecido acima; ignore menus, anúncios e rodapés.\n- NUNCA invente. Se o conteúdo não estiver acessível ou legível (login, link privado, página vazia), defina \"content_accessible\": false e explique o motivo no summary. Não deduza o conteúdo só pela URL.\n- Os campos de texto devem estar em PT-BR (traduza e resuma quando a fonte estiver em outro idioma).\n\nResponda ESTRITAMENTE em JSON neste formato:\n{\n  \"content_accessible\": true,\n  \"title\": \"Título curto e intuitivo\",\n  \"summary\": \"Resumo executivo em 2 a 3 parágrafos\",\n  \"key_takeaways\": [\"ponto-chave\"],\n  \"action_items\": [\"ação prática\"],\n  \"entities\": [\"pessoa/empresa/tecnologia/conceito\"],\n  \"raw_content\": \"Transcrição completa e/ou descrição visual e/ou texto extraído\",\n  \"tags\": [\"tag1\", \"tag2\", \"tag3\"]\n}`);\n\nconst parts = [{ text: lines.join('\\n') }];\nfor (const f of kept) parts.push({ inline_data: { mime_type: f.mime, data: f.base64 } });\nif (prep.fileUri) parts.push({ file_data: { file_uri: prep.fileUri } });\n\nreturn [{\n  json: {\n    geminiBody: {\n      contents: [{ parts }],\n      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }\n    },\n    sourceType: prep.sourceType,\n    url: prep.url,\n    hint: prep.hint,\n    meta,\n    warnings\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 300],
+      "id": "build-gemini-request",
+      "name": "Montar Requisição Gemini"
     }
   ],
   "connections": {
@@ -340,7 +431,7 @@
       "main": [
         [
           {
-            "node": "Credencial Gemini",
+            "node": "Preparar Conteúdo",
             "type": "main",
             "index": 0
           }
@@ -396,6 +487,57 @@
         [
           {
             "node": "Resposta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Conteúdo": {
+      "main": [
+        [
+          {
+            "node": "Precisa do Media Fetcher?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precisa do Media Fetcher?": {
+      "main": [
+        [
+          {
+            "node": "Media Fetcher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar Requisição Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Media Fetcher": {
+      "main": [
+        [
+          {
+            "node": "Montar Requisição Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Requisição Gemini": {
+      "main": [
+        [
+          {
+            "node": "Credencial Gemini",
             "type": "main",
             "index": 0
           }

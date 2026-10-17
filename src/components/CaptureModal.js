@@ -1,5 +1,14 @@
 import { insertBrainItem } from '../shared/services/supabaseClient.js';
-import { isPipelineConfigured, sendToPipeline, readFileAsBase64, MAX_FILE_BYTES, ACCEPTED_FILE_TYPES } from '../shared/services/captureService.js';
+import {
+  isPipelineConfigured,
+  sendToPipeline,
+  readFileAsBase64,
+  recordingToWav,
+  splitSharedText,
+  MAX_FILE_BYTES,
+  MAX_RECORD_SECONDS,
+  ACCEPTED_FILE_TYPES
+} from '../shared/services/captureService.js';
 
 export function createCaptureModal({ onItemSaved }) {
   const overlay = document.createElement('div');
@@ -28,7 +37,7 @@ export function createCaptureModal({ onItemSaved }) {
         <!-- Painel 1: Link / Reels / Vídeo -->
         <div id="panel-link">
           <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-            Cole o link de um <strong>Instagram Reels</strong>, <strong>YouTube</strong>, <strong>TikTok</strong>, artigo ou PDF para ser analisado e indexado pela IA:
+            Cole o link de um <strong>Reels/post do Instagram</strong>, <strong>YouTube</strong>, <strong>TikTok</strong>, <strong>site/artigo</strong>, <strong>PDF</strong> ou arquivo do <strong>Google Drive</strong> (público) para a IA ler, ouvir e indexar:
           </p>
           <input type="url" id="input-capture-url" placeholder="https://www.instagram.com/reel/... ou https://youtu.be/..." 
                  class="search-input" style="padding-left: 1rem; border-radius: var(--radius-md); font-size: 0.95rem; margin-bottom: 0.75rem;" />
@@ -59,7 +68,7 @@ export function createCaptureModal({ onItemSaved }) {
         <!-- Painel 4: Anexar Arquivo -->
         <div id="panel-file" style="display: none;">
           <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-            Anexe um <strong>PDF</strong>, <strong>imagem</strong>, <strong>áudio</strong> ou <strong>texto</strong> (até 10 MB) para ser analisado e indexado pela IA:
+            Anexe um <strong>PDF</strong>, <strong>imagem</strong>, <strong>áudio</strong>, <strong>vídeo</strong> ou <strong>texto</strong> (até 10 MB; para vídeos maiores, suba no Google Drive e cole o link):
           </p>
           <label id="file-dropzone" for="input-capture-file" style="display: block; text-align: center; padding: 1.5rem 1rem; border: 2px dashed var(--border-color); border-radius: var(--radius-md); cursor: pointer; color: var(--text-secondary);">
             <div style="font-size: 1.8rem; margin-bottom: 0.25rem;">📎</div>
@@ -163,15 +172,20 @@ export function createCaptureModal({ onItemSaved }) {
   fileDropzone.addEventListener('drop', (e) => setSelectedFile(e.dataTransfer.files[0] || null));
 
   function open(prefilled = {}) {
-    if (prefilled.url) {
-      inputUrl.value = prefilled.url;
+    const fromText = splitSharedText(prefilled.text);
+    const url = prefilled.url || fromText.url;
+    const context = prefilled.title || (fromText.url ? fromText.rest : '');
+
+    if (prefilled.file) {
+      setSelectedFile(prefilled.file);
+      inputFileTitle.value = context;
+      switchTab('file');
+    } else if (url) {
+      inputUrl.value = url;
+      inputTitleHint.value = context;
       switchTab('link');
-    }
-    if (prefilled.title) {
-      inputTitleHint.value = prefilled.title;
-      inputNoteTitle.value = prefilled.title;
-    }
-    if (prefilled.text && !prefilled.url) {
+    } else if (prefilled.text) {
+      inputNoteTitle.value = prefilled.title || '';
       inputNoteBody.value = prefilled.text;
       switchTab('note');
     }
@@ -189,9 +203,7 @@ export function createCaptureModal({ onItemSaved }) {
     inputFileTitle.value = '';
     setSelectedFile(null);
     statusBox.style.display = 'none';
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-    }
+    resetRecording();
   }
 
   closeBtn.addEventListener('click', close);
@@ -204,43 +216,73 @@ export function createCaptureModal({ onItemSaved }) {
   const voiceRecordBtn = overlay.querySelector('#voice-record-btn');
   const voiceTimer = overlay.querySelector('#voice-timer');
   const voiceStatusText = overlay.querySelector('#voice-status-text');
+  const VOICE_PLACEHOLDER = voiceStatusText.innerText;
+  let micStream = null;
+  let recordedBlob = null;
+
+  function releaseMic() {
+    clearInterval(recordInterval);
+    if (micStream) {
+      micStream.getTracks().forEach((track) => track.stop());
+      micStream = null;
+    }
+  }
+
+  function resetRecording() {
+    if (mediaRecorder) {
+      mediaRecorder.onstop = null;
+      if (mediaRecorder.state === 'recording') mediaRecorder.stop();
+    }
+    releaseMic();
+    mediaRecorder = null;
+    audioChunks = [];
+    recordedBlob = null;
+    recordSeconds = 0;
+    voiceTimer.innerText = '00:00';
+    voiceRecordBtn.style.transform = 'scale(1)';
+    voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+    voiceStatusText.innerText = VOICE_PLACEHOLDER;
+  }
 
   voiceRecordBtn.addEventListener('click', async () => {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        recordSeconds = 0;
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          clearInterval(recordInterval);
-          voiceRecordBtn.style.transform = 'scale(1)';
-          voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.2)';
-          voiceStatusText.innerText = 'Áudio gravado com sucesso! Pronto para salvar.';
-        };
-
-        mediaRecorder.start();
-        voiceRecordBtn.style.transform = 'scale(1.15)';
-        voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.6)';
-        voiceStatusText.innerText = 'Gravando sua voz... Fale normalmente.';
-
-        recordInterval = setInterval(() => {
-          recordSeconds++;
-          const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
-          const s = String(recordSeconds % 60).padStart(2, '0');
-          voiceTimer.innerText = `${m}:${s}`;
-        }, 1000);
-
-      } catch (err) {
-        alert('Permissão de microfone negada ou dispositivo não encontrado.');
-      }
-    } else if (mediaRecorder.state === 'recording') {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
+      return;
+    }
+
+    try {
+      resetRecording();
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(micStream);
+      mediaRecorder = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        releaseMic();
+        recordedBlob = new Blob(audioChunks, { type: recorder.mimeType || 'audio/webm' });
+        voiceRecordBtn.style.transform = 'scale(1)';
+        voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+        voiceStatusText.innerText = 'Áudio gravado! Clique em Salvar para a IA transcrever, ou no microfone para regravar.';
+      };
+
+      recorder.start();
+      voiceRecordBtn.style.transform = 'scale(1.15)';
+      voiceRecordBtn.style.background = 'rgba(239, 68, 68, 0.6)';
+      voiceStatusText.innerText = `Gravando sua voz... Fale normalmente (máx. ${MAX_RECORD_SECONDS / 60} min).`;
+
+      recordInterval = setInterval(() => {
+        recordSeconds++;
+        const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+        const sec = String(recordSeconds % 60).padStart(2, '0');
+        voiceTimer.innerText = `${m}:${sec}`;
+        if (recordSeconds >= MAX_RECORD_SECONDS) recorder.stop();
+      }, 1000);
+    } catch (err) {
+      releaseMic();
+      alert('Permissão de microfone negada ou dispositivo não encontrado.');
     }
   });
 
@@ -253,7 +295,16 @@ export function createCaptureModal({ onItemSaved }) {
     setTimeout(() => {
       close();
       if (onItemSaved) onItemSaved();
-    }, isWarning ? 2500 : 900);
+    }, isWarning ? 5000 : 900);
+  }
+
+  function reportPipelineResult(result, successMessage) {
+    if (result && result.analysis_ok === false) {
+      const reasons = (result.warnings || []).join(' ');
+      showSuccess(`⚠️ Salvo na caixa de entrada, mas a IA não conseguiu analisar tudo. ${reasons}`.trim(), true);
+    } else {
+      showSuccess(successMessage);
+    }
   }
 
   // Salvar
@@ -271,8 +322,8 @@ export function createCaptureModal({ onItemSaved }) {
 
         if (isPipelineConfigured()) {
           try {
-            await sendToPipeline({ url });
-            showSuccess('✅ Link enviado e analisado pela IA!');
+            const result = await sendToPipeline({ url, hint: inputTitleHint.value.trim() || undefined });
+            reportPipelineResult(result, '✅ Link analisado e catalogado pela IA!');
             return;
           } catch (pipelineErr) {
             pipelineWarning = `⚠️ ${pipelineErr.message} Salvo na caixa de entrada sem análise.`;
@@ -328,12 +379,13 @@ export function createCaptureModal({ onItemSaved }) {
 
         if (isPipelineConfigured()) {
           try {
-            await sendToPipeline({
+            const result = await sendToPipeline({
               file_base64: await readFileAsBase64(selectedFile),
               file_mime: mime,
-              file_name: selectedFile.name
+              file_name: selectedFile.name,
+              hint: titleHint || undefined
             });
-            showSuccess('✅ Arquivo enviado e analisado pela IA!');
+            reportPipelineResult(result, '✅ Arquivo analisado e catalogado pela IA!');
             return;
           } catch (pipelineErr) {
             pipelineWarning = `⚠️ ${pipelineErr.message} Registrado na caixa de entrada sem análise.`;
@@ -355,17 +407,32 @@ export function createCaptureModal({ onItemSaved }) {
         });
 
       } else if (activeMode === 'voice') {
-        const newItem = {
+        if (!recordedBlob) throw new Error('Grave um áudio antes de salvar.');
+
+        if (isPipelineConfigured()) {
+          try {
+            const wav = await recordingToWav(recordedBlob);
+            const result = await sendToPipeline({
+              file_base64: await readFileAsBase64(wav),
+              file_mime: 'audio/wav',
+              file_name: 'voz.wav'
+            });
+            reportPipelineResult(result, '✅ Áudio transcrito e catalogado pela IA!');
+            return;
+          } catch (pipelineErr) {
+            pipelineWarning = `⚠️ ${pipelineErr.message} A gravação não foi transcrita.`;
+          }
+        }
+
+        await insertBrainItem({
           title: `Áudio Gravado (${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`,
-          summary: `Gravação de voz com ${recordSeconds}s gravada diretamente no Segundo Cérebro.`,
+          summary: `Gravação de voz com ${recordSeconds}s (não transcrita).`,
           source_type: 'audio',
           source_url: null,
-          raw_content: 'Áudio capturado pelo microfone via PWA.',
-          key_takeaways: ['Gravação de voz direta via navegador'],
-          tags: ['audio', 'voz']
-        };
-
-        await insertBrainItem(newItem);
+          raw_content: 'Áudio capturado pelo microfone, sem transcrição.',
+          key_takeaways: ['Gravação de voz sem análise da IA'],
+          tags: ['audio', 'voz', 'inbox']
+        });
       }
 
       showSuccess(pipelineWarning || '✅ Salvo com sucesso no seu Segundo Cérebro!', Boolean(pipelineWarning));
