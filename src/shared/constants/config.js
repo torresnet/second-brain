@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
   name: 'Segundo Cérebro AI',
-  version: '0.4.0',
+  version: '0.4.1',
   supabase: {
     url: 'https://eicmqisneklcvhakvgce.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY21xaXNuZWtsY3ZoYWt2Z2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMDYwNzYsImV4cCI6MjEwNzU4MjA3Nn0.Upgv8GrnpfwnwWNHsUDSM5S00PZQTJzLVcHsFvlZx0s'

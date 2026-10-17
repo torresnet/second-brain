@@ -99,23 +99,6 @@ export async function getBrainStats() {
 }
 
 /**
- * Busca semântica vetorial através da função RPC do Supabase
- */
-export async function searchBrainSemantics(queryEmbedding, threshold = 0.25, count = 6) {
-  const { data, error } = await supabase.rpc('match_brain_chunks', {
-    query_embedding: queryEmbedding,
-    match_threshold: threshold,
-    match_count: count
-  });
-
-  if (error) {
-    console.error('Erro na busca semântica vetorial:', error);
-    throw error;
-  }
-  return data || [];
-}
-
-/**
  * Cria uma anotação ou item diretamente no Supabase
  */
 export async function insertBrainItem(item) {

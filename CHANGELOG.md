@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.1] - 2026-10-17
+
+### Corrigido
+- O service worker nunca era registrado em produção (caminho `/public/sw.js` não existe no build); com isso o "Compartilhar" do celular também não funcionava.
+
+### Segurança
+- O setup (`auth_rls.sql`) não recomenda mais um MFA que o app não usa: o acesso é por e-mail e senha.
+- **media-fetcher:** o `yt-dlp` só é usado em plataformas conhecidas e sem o extrator genérico; os demais links são baixados direto, com o IP validado fixado (fecha SSRF para a rede interna).
+- `scripts/egress-firewall.sh`: regras de firewall para o servidor que impedem o media-fetcher e o n8n de abrir conexões para a rede interna (DNS rebinding).
+- `brain-process` não devolve mais mensagens de erro do banco ao cliente (ficam no log).
+- Removida a busca legada `match_brain_chunks` (migração `20261017150000_security_hardening.sql`) e o código morto que a chamava; o service worker não pré-preenche mais a captura a partir de links externos para `/share-target`.
+
 ## [0.4.0] - 2026-10-17
 
 ### Alterado

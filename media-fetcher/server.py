@@ -36,6 +36,16 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
 
+# Só estas plataformas passam pelo yt-dlp (extratores próprios, sem o genérico). Qualquer outro link é baixado
+# direto com o IP validado e fixado: o yt-dlp resolve DNS e segue redirects sozinho, sem as checagens de SSRF.
+TRUSTED_MEDIA_HOSTS = (
+    "instagram.com", "tiktok.com", "facebook.com", "fb.watch", "fb.com", "twitter.com", "x.com",
+    "threads.net", "vimeo.com", "kwai.com", "pinterest.com", "pinterest.com.br", "pin.it", "reddit.com",
+    "twitch.tv", "dailymotion.com",
+    "youtube.com", "youtu.be", "youtube-nocookie.com",
+    "drive.google.com", "drive.usercontent.google.com", "docs.google.com",
+)
+
 VIDEO_EXT = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".3gp", ".flv"}
 AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".gif"}
@@ -76,6 +86,15 @@ def resolve_public(url):
 
 def assert_public_url(url):
     resolve_public(url)
+
+
+def is_trusted_media_host(url):
+    """True se o host for uma das plataformas de TRUSTED_MEDIA_HOSTS (ou subdomínio dela)."""
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return any(host == base or host.endswith("." + base) for base in TRUSTED_MEDIA_HOSTS)
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -130,9 +149,10 @@ def open_validated(url, timeout=30):
 
 
 def preflight(url):
-    """Barra links cujo destino (ou cadeia de redirecionamentos) aponte para endereço interno."""
+    """Barra links cujo destino (ou cadeia de redirecionamentos) aponte para endereço interno.
+    Devolve a URL final, já validada."""
     try:
-        conn, resp, _ = open_validated(url, timeout=15)
+        conn, resp, final_url = open_validated(url, timeout=15)
     except FetchError:
         raise
     except (OSError, http.client.HTTPException):
@@ -140,6 +160,7 @@ def preflight(url):
         raise FetchError("Não foi possível verificar o link")
     resp.close()
     conn.close()
+    return final_url
 
 
 def run(cmd, timeout):
@@ -215,7 +236,8 @@ def shrink_image(src, dst):
 
 def download_with_ytdlp(url, workdir):
     cmd = [
-        "yt-dlp", "--no-warnings", "--yes-playlist", "--playlist-end", str(MAX_IMAGES),
+        "yt-dlp", "--no-warnings", "--use-extractors", "default,-generic",
+        "--yes-playlist", "--playlist-end", str(MAX_IMAGES),
         "--max-filesize", str(MAX_DOWNLOAD_BYTES), "--socket-timeout", "20", "--retries", "2",
         "-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b",
         "--merge-output-format", "mp4", "--write-info-json", "--restrict-filenames",
@@ -329,16 +351,22 @@ def prepare_files(workdir):
 
 
 def fetch_media(url):
-    preflight(url)
+    final_url = preflight(url)
+    # Plataforma -> plataforma (ex.: Reel que redireciona para o login): o extrator precisa da URL original.
+    # Plataforma -> outro site (redirecionador de links) ou site qualquer: download direto do destino validado.
+    use_ytdlp = is_trusted_media_host(url) and is_trusted_media_host(final_url)
     workdir = tempfile.mkdtemp(prefix="fetch_")
     try:
-        try:
-            download_with_ytdlp(url, workdir)
-        except FetchError as ytdlp_error:
+        if use_ytdlp:
             try:
-                download_direct(url, workdir)
-            except (FetchError, OSError, ValueError):
-                raise ytdlp_error
+                download_with_ytdlp(url, workdir)
+            except FetchError as ytdlp_error:
+                try:
+                    download_direct(final_url, workdir)
+                except (FetchError, OSError, ValueError):
+                    raise ytdlp_error
+        else:
+            download_direct(final_url, workdir)
         meta = read_metadata(workdir)
         files, notes = prepare_files(workdir)
         return {"ok": True, "meta": meta, "files": files, "notes": notes}

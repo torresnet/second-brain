@@ -52,10 +52,12 @@ export async function createDb({ applyMigration = true } = {}) {
 
 const AUTH_RLS_PATH = fileURLToPath(new URL('../../supabase/auth_rls.sql', import.meta.url));
 const BASE_RLS_MIGRATION_PATH = fileURLToPath(new URL('../../supabase/migrations/20261017110000_base_schema_rls.sql', import.meta.url));
+const HARDENING_MIGRATION_PATH = fileURLToPath(new URL('../../supabase/migrations/20261017150000_security_hardening.sql', import.meta.url));
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 
 export const RLS_AUTH_SQL = readFileSync(AUTH_RLS_PATH, 'utf8');
 export const RLS_BASE_MIGRATION_SQL = readFileSync(BASE_RLS_MIGRATION_PATH, 'utf8');
+export const HARDENING_MIGRATION_SQL = readFileSync(HARDENING_MIGRATION_PATH, 'utf8');
 
 /**
  * Banco com o SQL real de produção (auth_rls.sql + todas as migrations) e papéis anon/authenticated,
@@ -87,6 +89,7 @@ export async function createRlsDb({ ownerId, legacyMatchFunction = false } = {})
   await db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
   await db.exec(readFileSync(DUPLICATES_MIGRATION_PATH, 'utf8'));
   await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
+  await db.exec(HARDENING_MIGRATION_SQL);
   return db;
 }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'second-brain-v3';
+const CACHE_NAME = 'second-brain-v4';
 const SHARED_CACHE = 'share-target-files';
 const MAX_SHARED_FILE_BYTES = 10 * 1024 * 1024; // mesmo limite do app
 const SHARED_FILE_TYPE = /^(application\/pdf|image\/|audio\/|video\/|text\/plain|text\/markdown)/i;
@@ -7,13 +7,8 @@ const SHARED_FILE_EXT = /\.(pdf|md|txt|png|jpe?g|webp|heic|heif|mp3|wav|m4a|aac|
 function isAcceptedSharedFile(file) {
   return file.size <= MAX_SHARED_FILE_BYTES && (SHARED_FILE_TYPE.test(file.type || '') || SHARED_FILE_EXT.test(file.name || ''));
 }
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/src/main.js',
-  '/src/styles/index.css',
-  '/public/manifest.json'
-];
+// Os demais arquivos (com hash no nome) entram no cache na primeira visita
+const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -64,13 +59,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Redireciona o share-target (GET) para a página inicial com query parameters
+  // O manifest só declara POST: um GET em /share-target viria de link externo, então abre o app sem pré-preencher nada
   if (url.pathname === '/share-target') {
-    event.respondWith(
-      Response.redirect('/?shared_url=' + encodeURIComponent(url.searchParams.get('url') || '') + 
-                        '&shared_title=' + encodeURIComponent(url.searchParams.get('title') || '') + 
-                        '&shared_text=' + encodeURIComponent(url.searchParams.get('text') || ''), 303)
-    );
+    event.respondWith(Response.redirect('/', 303));
     return;
   }
 

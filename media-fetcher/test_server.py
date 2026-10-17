@@ -106,5 +106,77 @@ class PreflightTests(unittest.TestCase):
                 server.preflight("https://exemplo.com/video")
 
 
+class PlataformaConfiavelTests(unittest.TestCase):
+    def test_hosts_de_plataformas_e_subdominios(self):
+        for url in ["https://www.instagram.com/reel/abc/", "https://vm.tiktok.com/x", "https://youtu.be/abc",
+                    "https://m.youtube.com/watch?v=1", "https://x.com/u/status/1", "https://vimeo.com/1"]:
+            self.assertTrue(server.is_trusted_media_host(url), url)
+
+    def test_hosts_desconhecidos_ou_parecidos_nao_sao_confiaveis(self):
+        for url in ["https://exemplo.com/video.mp4", "https://instagram.com.evil.example/x",
+                    "https://evilinstagram.com/x", "http://169.254.169.254/", "nao-e-url"]:
+            self.assertFalse(server.is_trusted_media_host(url), url)
+
+
+class FetchMediaTests(unittest.TestCase):
+    def rodar(self, final_url, original="https://link-original.example/a"):
+        chamadas = {"ytdlp": [], "direto": []}
+
+        def ytdlp(url, workdir):
+            chamadas["ytdlp"].append(url)
+
+        def direto(url, workdir):
+            chamadas["direto"].append(url)
+
+        with mock.patch.object(server, "preflight", return_value=final_url), \
+                mock.patch.object(server, "download_with_ytdlp", side_effect=ytdlp), \
+                mock.patch.object(server, "download_direct", side_effect=direto), \
+                mock.patch.object(server, "prepare_files", return_value=([{"mime": "video/mp4", "base64": ""}], [])):
+            server.fetch_media(original)
+        return chamadas
+
+    def test_link_generico_nunca_passa_pelo_yt_dlp(self):
+        chamadas = self.rodar("https://exemplo.com/video.mp4", "https://exemplo.com/v")
+        self.assertEqual(chamadas["ytdlp"], [])
+        self.assertEqual(chamadas["direto"], ["https://exemplo.com/video.mp4"])
+
+    def test_link_generico_que_redireciona_para_plataforma_nao_usa_yt_dlp(self):
+        chamadas = self.rodar("https://www.instagram.com/reel/abc/", "https://site-do-atacante.example/r")
+        self.assertEqual(chamadas["ytdlp"], [])
+
+    def test_plataforma_usa_yt_dlp_com_a_url_original(self):
+        # o preflight sem login costuma cair na página de login; o extrator precisa do link do Reel
+        chamadas = self.rodar("https://www.instagram.com/accounts/login/?next=/reel/abc/",
+                              "https://www.instagram.com/reel/abc/")
+        self.assertEqual(chamadas["ytdlp"], ["https://www.instagram.com/reel/abc/"])
+
+    def test_link_de_plataforma_que_redireciona_para_fora_nao_usa_yt_dlp(self):
+        # ex.: l.instagram.com/?u=... redireciona para um site qualquer
+        chamadas = self.rodar("https://site-do-atacante.example/v.mp4", "https://l.instagram.com/?u=x")
+        self.assertEqual(chamadas["ytdlp"], [])
+        self.assertEqual(chamadas["direto"], ["https://site-do-atacante.example/v.mp4"])
+
+    def test_preflight_devolve_a_url_final_depois_dos_redirects(self):
+        resposta = FakeResponse(200, {"Content-Type": "video/mp4"})
+        with mock.patch.object(server, "open_validated", return_value=(FakeConnection(resposta), resposta, "https://final.example/v")):
+            self.assertEqual(server.preflight("https://inicio.example/"), "https://final.example/v")
+
+
+class YtDlpComandoTests(unittest.TestCase):
+    def test_extrator_generico_desligado(self):
+        capturado = {}
+
+        def fake_run(cmd, timeout):
+            capturado["cmd"] = cmd
+            return mock.Mock(stderr="", stdout="")
+
+        with mock.patch.object(server, "run", side_effect=fake_run), mock.patch("os.listdir", return_value=["01.mp4"]):
+            server.download_with_ytdlp("https://www.instagram.com/reel/abc/", "/tmp/x")
+        cmd = capturado["cmd"]
+        self.assertIn("--use-extractors", cmd)
+        self.assertEqual(cmd[cmd.index("--use-extractors") + 1], "default,-generic")
+        self.assertEqual(cmd[-1], "https://www.instagram.com/reel/abc/")
+
+
 if __name__ == "__main__":
     unittest.main()

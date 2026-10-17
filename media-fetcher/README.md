@@ -2,7 +2,7 @@
 
 Serviço auxiliar do pipeline de ingestão. O n8n chama `POST /fetch` quando o link é de uma rede social
 (Instagram, TikTok, Facebook, X, Vimeo...) ou um vídeo/áudio grande demais para ir direto ao Gemini.
-O serviço baixa a mídia com **yt-dlp**, comprime com **ffmpeg** para caber em ~12 MB e devolve em base64.
+O serviço baixa a mídia com **yt-dlp** (plataformas conhecidas) ou por download direto (demais links), comprime com **ffmpeg** para caber em ~12 MB e devolve em base64.
 
 ## Deploy no Coolify
 
@@ -28,7 +28,8 @@ Sem cookies, posts públicos às vezes funcionam; quando não, o item é salvo c
 ## Segurança (SSRF)
 
 - O link é verificado antes do download (`preflight`): só http/https, portas 80/443, sem credenciais, todos os IPs públicos, e a cadeia de redirects (até 5) é revalidada com conexão fixada no IP. Se o destino não puder ser verificado, o download não roda.
-- **Limite conhecido:** depois do preflight, o `yt-dlp` resolve DNS e segue redirects por conta própria (DNS rebinding, manifestos HLS/DASH apontando para IP interno). O código sozinho não fecha isso. **Obrigatório na infra:** rodar o container em rede sem rota para a rede interna do Coolify e bloquear `169.254.169.254` (e demais faixas privadas) na saída, ou forçar a saída por um proxy que filtre destinos privados.
+- O `yt-dlp` só roda quando o link original **e** o destino final validado são de plataformas conhecidas (`TRUSTED_MEDIA_HOSTS` em `server.py`: Instagram, TikTok, YouTube, X, Vimeo, Google Drive...) e sempre com o extrator genérico desligado (`--use-extractors default,-generic`), para não seguir vídeos embutidos em páginas arbitrárias. Qualquer outro link é baixado direto, com conexão fixada no IP validado.
+- Camada extra na infra (recomendada): `scripts/egress-firewall.sh` bloqueia conexões novas deste container para faixas privadas e para o serviço de metadados da nuvem.
 - Testes: `python -m unittest media-fetcher/test_server.py`.
 
 ## Limites
@@ -40,7 +41,7 @@ Sem cookies, posts públicos às vezes funcionam; quando não, o item é salvo c
 
 ## Manutenção
 
-O container atualiza o `yt-dlp` a cada start. Se um site parar de funcionar, reinicie/redeploy o serviço.
+A versão do `yt-dlp` é fixa (`YTDLP_VERSION` no Dockerfile). Se um site parar de funcionar, atualize essa versão e faça redeploy.
 
 ## API
 

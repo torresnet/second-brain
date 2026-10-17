@@ -38,7 +38,10 @@ Deno.serve(async (req: Request) => {
       .or(`analysis_status.eq.pending,and(analysis_status.eq.processing,analysis_updated_at.lt.${staleBefore})`)
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (error) return json(req, { error: `Falha ao listar pendentes: ${error.message}` }, 500);
+    if (error) {
+      console.error('brain-process: falha ao listar pendentes:', error.message);
+      return json(req, { error: 'Não foi possível listar os itens pendentes. Tente novamente.' }, 500);
+    }
     ids = (data ?? []).map((r: { id: string }) => r.id);
   } else if (typeof body.item_id === 'string' && UUID.test(body.item_id)) {
     ids = [body.item_id];
@@ -51,9 +54,11 @@ Deno.serve(async (req: Request) => {
     try {
       results.push({ item_id: id, ...(await processItem(id, deps)) });
     } catch (error) {
+      // O detalhe (pode conter mensagens do banco) fica no log; o cliente recebe só uma mensagem genérica
+      console.error('brain-process falhou:', id, error instanceof Error ? error.message : error);
       results.push({
         item_id: id, status: 'failed', atoms: 0, chunks: 0, links: { ok: 0, inaccessible: 0, skipped: 0 },
-        warnings: [error instanceof Error ? error.message : String(error)]
+        warnings: ['Erro inesperado ao processar a nota. Tente novamente em instantes.']
       });
     }
   }

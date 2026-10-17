@@ -502,7 +502,8 @@ async function checkSharedParams() {
  */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/public/sw.js').catch(err => {
+    // O Vite publica public/ na raiz (dev e build): /sw.js com escopo / cobre o app inteiro e o /share-target
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(err => {
       console.warn('Service Worker não registrado:', err);
     });
   });

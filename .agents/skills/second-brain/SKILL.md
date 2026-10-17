@@ -28,7 +28,7 @@ Ele incorpora as melhores práticas da comunidade open-source:
 - **Tabela Principal:** `public.brain_items`
   - Campos: `id`, `title`, `summary`, `source_type`, `source_url`, `stage`, `entities`, `action_items`, `key_takeaways`, `tags`, `raw_content`, `created_at`
 - **Tabela Vetorial:** `public.brain_chunks` (campo `embedding` 768 dimensões)
-- **Função RPC de Busca Semântica:** `match_brain_chunks(query_embedding, match_threshold, match_count)`
+- **Função RPC de Busca:** `search_brain(query_embedding, query_text, keywords, match_count, filter_kinds, filter_category)` (híbrida: vetor + texto + nome). A antiga `match_brain_chunks` foi removida.
 
 ---
 

@@ -2,7 +2,7 @@
 -- 1) Crie o seu usuário em Authentication > Users e copie o "User UID".
 -- 2) Troque o UUID de zeros abaixo pelo seu User UID. O script aborta se o valor não for trocado.
 -- 3) Em Authentication > Sign In / Providers, desative "Allow new users to sign up".
--- 4) Em Authentication > Multi-Factor, ative o TOTP e cadastre o autenticador do dono.
+-- O acesso é só por e-mail e senha (sem segundo fator): use uma senha forte e exclusiva deste app.
 -- As políticas RLS das tabelas ficam em migrations/20261017110000_base_schema_rls.sql (e nas demais migrations).
 -- Idempotente: pode ser executado de novo (por exemplo, para trocar o dono).
 

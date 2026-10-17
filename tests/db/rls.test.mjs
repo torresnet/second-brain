@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRlsDb, asUser, RLS_AUTH_SQL, RLS_BASE_MIGRATION_SQL } from '../helpers/db.mjs';
+import { createRlsDb, asUser, RLS_AUTH_SQL, RLS_BASE_MIGRATION_SQL, HARDENING_MIGRATION_SQL } from '../helpers/db.mjs';
 import { PGlite } from '@electric-sql/pglite';
 
 const OWNER = '11111111-1111-1111-1111-111111111111';
@@ -9,7 +9,7 @@ const DATA_TABLES = ['brain_items', 'brain_chunks', 'brain_atoms', 'brain_duplic
 const RPCS = [
   'owner_check', 'is_owner', 'search_brain', 'brain_overview', 'brain_claim_item', 'brain_replace_item_knowledge',
   'brain_item_links', 'brain_set_duplicate_decision', 'brain_find_duplicates_by_url', 'brain_possible_duplicates',
-  'brain_merge_items', 'brain_set_practical_examples', 'match_brain_chunks'
+  'brain_merge_items', 'brain_set_practical_examples'
 ];
 
 const ITEM_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -50,7 +50,7 @@ test('RLS: anon não acessa nenhuma tabela nem função', async () => {
   const { rows } = await db.query(
     `select p.proname, has_function_privilege('anon', p.oid, 'execute') as anon, has_function_privilege('authenticated', p.oid, 'execute') as auth
      from pg_proc p where pronamespace = 'public'::regnamespace and proname = any($1)`, [RPCS]);
-  assert.ok(rows.length >= RPCS.length - 1);
+  assert.equal(rows.length, RPCS.length);
   for (const r of rows) {
     assert.equal(r.anon, false, `${r.proname} executável por anon`);
     assert.equal(r.auth, true, `${r.proname} não executável por authenticated`);
@@ -138,15 +138,16 @@ test('RLS: is_owner tem search_path fixo e é security definer; a migration base
   assert.equal(await count(db, 'brain_items'), 2);
 });
 
-test('RLS: match_brain_chunks legada vira security invoker e fecha para anon', async () => {
+test('Hardening: a busca legada match_brain_chunks é removida (todas as sobrecargas)', async () => {
   const db = await createRlsDb({ ownerId: OWNER, legacyMatchFunction: true });
-  await db.query(`insert into public.brain_chunks (content) values ('segredo')`);
-  const { rows } = await db.query(`select prosecdef, has_function_privilege('anon', oid, 'execute') as anon from pg_proc where proname = 'match_brain_chunks'`);
-  assert.deepEqual(rows, [{ prosecdef: false, anon: false }]);
-  await asUser(db, 'authenticated', STRANGER, async () => {
-    assert.equal((await db.query(`select * from public.match_brain_chunks(null, 0.1, 10)`)).rows.length, 0);
-  });
-  await asUser(db, 'authenticated', OWNER, async () => {
-    assert.equal((await db.query(`select * from public.match_brain_chunks(null, 0.1, 10)`)).rows.length, 1);
-  });
+  const { rows } = await db.query(`select count(*)::int as n from pg_proc where proname = 'match_brain_chunks'`);
+  assert.equal(rows[0].n, 0);
+});
+
+test('Limpeza: a migration de segurança é idempotente e não afeta o acesso do dono', async () => {
+  const db = await seeded();
+  await db.exec(HARDENING_MIGRATION_SQL);
+  await db.exec(HARDENING_MIGRATION_SQL);
+  await asUser(db, 'authenticated', OWNER, async () => assert.equal(await count(db, 'brain_items'), 2));
+  await asUser(db, 'authenticated', STRANGER, async () => assert.equal(await count(db, 'brain_items'), 0));
 });

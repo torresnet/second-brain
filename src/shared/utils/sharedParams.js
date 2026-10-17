@@ -1,5 +1,6 @@
-// Parâmetros de compartilhamento (Web Share Target). Só os `shared_*` gerados pelo service worker valem:
-// aceitar ?url=, ?text= ou ?title= deixaria qualquer link externo pré-preencher a captura.
+// Parâmetros de compartilhamento (Web Share Target). Só os `shared_*` são lidos (o service worker os gera a
+// partir do POST do celular). Qualquer pessoa ainda pode montar um link /?shared_url=..., por isso a captura
+// pré-preenchida sempre mostra o aviso de origem externa e só salva com confirmação manual (CaptureModal.js).
 export function parseSharedParams(search) {
   const params = new URLSearchParams(search);
   const url = params.get('shared_url');
