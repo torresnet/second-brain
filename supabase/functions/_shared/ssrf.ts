@@ -95,6 +95,27 @@ function assertAllowedPort(url: URL): void {
   if (url.port && !['80', '443'].includes(url.port)) throw new Error('Porta não permitida');
 }
 
+/**
+ * Resolve DNS por DNS-over-HTTPS. Falha em A ou AAAA é erro (nunca "lista vazia"):
+ * ignorar o AAAA deixaria o fetch conectar em IPv6 privado sem checagem.
+ */
+export function createDohResolver(fetchImpl: typeof fetch = fetch): DnsResolver {
+  return async host => {
+    const query = async (type: 'A' | 'AAAA'): Promise<string[]> => {
+      const res = await fetchImpl(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, {
+        headers: { Accept: 'application/dns-json' }
+      });
+      if (!res.ok) throw new Error(`DoH HTTP ${res.status}`);
+      const body = await res.json();
+      return (body.Answer ?? [])
+        .filter((a: { type: number }) => a.type === (type === 'A' ? 1 : 28))
+        .map((a: { data: string }) => a.data);
+    };
+    const [v4, v6] = await Promise.all([query('A'), query('AAAA')]);
+    return [...v4, ...v6];
+  };
+}
+
 export interface SafeFetchOptions {
   fetchImpl?: typeof fetch;
   resolve?: DnsResolver;

@@ -2,17 +2,18 @@
 e devolve arquivos prontos para o Gemini (comprimidos para caber no limite inline)."""
 import base64
 import hmac
+import http.client
 import ipaddress
 import json
 import mimetypes
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import tempfile
 import threading
 import urllib.parse
-import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 API_KEY = os.environ.get("FETCHER_API_KEY", "")
@@ -27,6 +28,9 @@ MAX_IMAGES = 10
 YTDLP_TIMEOUT = 240
 FFMPEG_TIMEOUT = 300
 MAX_BODY_BYTES = 8192
+ALLOWED_PORTS = (80, 443)
+MAX_REDIRECTS = 3
+REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -43,18 +47,98 @@ class FetchError(Exception):
     pass
 
 
-def assert_public_url(url):
-    parsed = urllib.parse.urlparse(url)
+def resolve_public(url):
+    """Valida a URL e devolve (parsed, porta, ip). Todos os IPs do host precisam ser públicos."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError:
+        raise FetchError("URL inválida")
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise FetchError("URL inválida")
+    if parsed.username or parsed.password:
+        raise FetchError("URL com credenciais não permitida")
+    if port not in ALLOWED_PORTS:
+        raise FetchError("Porta não permitida")
     try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(parsed.hostname, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
+        raise FetchError("Domínio não encontrado")
+    if not infos:
         raise FetchError("Domínio não encontrado")
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
+        ip = getattr(ip, "ipv4_mapped", None) or ip
         if not ip.is_global:
             raise FetchError("Endereço não permitido")
+    return parsed, port, infos[0][4][0]
+
+
+def assert_public_url(url):
+    resolve_public(url)
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Conecta no IP já validado (evita DNS rebinding entre a checagem e o acesso)."""
+
+    def __init__(self, host, ip, port, timeout):
+        super().__init__(host, port=port, timeout=timeout)
+        self._pinned_ip = ip
+
+    def connect(self):
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host, ip, port, timeout):
+        super().__init__(host, port=port, timeout=timeout, context=ssl.create_default_context())
+        self._pinned_ip = ip
+
+    def connect(self):
+        sock = socket.create_connection((self._pinned_ip, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+def _connect(parsed, port, ip, timeout):
+    cls = _PinnedHTTPSConnection if parsed.scheme == "https" else _PinnedHTTPConnection
+    return cls(parsed.hostname, ip, port, timeout)
+
+
+def open_validated(url, timeout=30):
+    """GET que valida o destino e cada redirecionamento. Devolve (conexão, resposta, url final)."""
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        parsed, port, ip = resolve_public(current)
+        path = (parsed.path or "/") + ("?" + parsed.query if parsed.query else "")
+        conn = _connect(parsed, port, ip, timeout)
+        try:
+            conn.request("GET", path, headers={"User-Agent": USER_AGENT})
+            resp = conn.getresponse()
+        except BaseException:
+            conn.close()
+            raise
+        if resp.status in REDIRECT_STATUSES:
+            location = resp.getheader("Location")
+            resp.close()
+            conn.close()
+            if not location:
+                raise FetchError("Redirecionamento sem destino")
+            current = urllib.parse.urljoin(current, location)
+            continue
+        return conn, resp, current
+    raise FetchError("Redirecionamentos demais")
+
+
+def preflight(url):
+    """Barra links cujo destino (ou cadeia de redirecionamentos) aponte para endereço interno."""
+    try:
+        conn, resp, _ = open_validated(url, timeout=15)
+    except FetchError:
+        raise
+    except (OSError, http.client.HTTPException):
+        return  # site fora do ar ou que bloqueia este cliente: o download decide
+    resp.close()
+    conn.close()
 
 
 def run(cmd, timeout):
@@ -147,9 +231,9 @@ def download_with_ytdlp(url, workdir):
 
 
 def download_direct(url, workdir):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as resp:
-        mime = (resp.headers.get_content_type() or "").lower()
+    conn, resp, _ = open_validated(url)
+    try:
+        mime = (resp.getheader("Content-Type") or "").split(";")[0].strip().lower()
         ext = mimetypes.guess_extension(mime) or ""
         if not (mime.startswith(("video/", "audio/", "image/"))):
             raise FetchError("O link não aponta para uma mídia baixável")
@@ -164,6 +248,9 @@ def download_direct(url, workdir):
                 if size > MAX_DOWNLOAD_BYTES:
                     raise FetchError("Arquivo grande demais")
                 out.write(chunk)
+    finally:
+        resp.close()
+        conn.close()
 
 
 def read_metadata(workdir):
@@ -241,7 +328,7 @@ def prepare_files(workdir):
 
 
 def fetch_media(url):
-    assert_public_url(url)
+    preflight(url)
     workdir = tempfile.mkdtemp(prefix="fetch_")
     try:
         try:

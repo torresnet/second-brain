@@ -1,6 +1,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPrivateIp, assertPublicUrl, safeFetchText } from '../../supabase/functions/_shared/ssrf.ts';
+import { isPrivateIp, assertPublicUrl, safeFetchText, createDohResolver } from '../../supabase/functions/_shared/ssrf.ts';
+
+function dohFetch({ a = [], aaaa = [], failAaaa = false } = {}) {
+  return async (url) => {
+    const type = new URL(url).searchParams.get('type');
+    if (type === 'AAAA' && failAaaa) return { ok: false, status: 503, json: async () => ({}) };
+    const Answer = type === 'A' ? a.map(data => ({ type: 1, data })) : aaaa.map(data => ({ type: 28, data }));
+    return { ok: true, status: 200, json: async () => ({ Answer }) };
+  };
+}
+
+test('resolvedor DoH junta A e AAAA', async () => {
+  const resolve = createDohResolver(dohFetch({ a: ['93.184.216.34'], aaaa: ['2606:2800::1'] }));
+  assert.deepEqual(await resolve('exemplo.com'), ['93.184.216.34', '2606:2800::1']);
+});
+
+test('falha na consulta AAAA nunca vira lista vazia: a URL é recusada', async () => {
+  const resolve = createDohResolver(dohFetch({ a: ['93.184.216.34'], failAaaa: true }));
+  await assert.rejects(resolve('exemplo.com'), /DoH HTTP 503/);
+  await assert.rejects(assertPublicUrl('https://exemplo.com', resolve), /resolvido/);
+});
+
+test('AAAA privado devolvido pelo DoH bloqueia a URL', async () => {
+  const resolve = createDohResolver(dohFetch({ a: ['93.184.216.34'], aaaa: ['fd00::1'] }));
+  await assert.rejects(assertPublicUrl('https://exemplo.com', resolve), /interno/);
+});
 
 test('isPrivateIp reconhece faixas internas (v4 e v6)', () => {
   for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.1', '192.168.1.1', '169.254.169.254',

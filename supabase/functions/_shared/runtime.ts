@@ -6,7 +6,7 @@ import type { AskDeps, AtomRow, ItemBrief, SearchHit } from './ask.ts';
 import { createGemini } from './gemini.ts';
 import type { Gemini } from './gemini.ts';
 import type { ChunkInput, ItemRow, ProcessStore } from './process.ts';
-import { safeFetchText } from './ssrf.ts';
+import { createDohResolver, safeFetchText } from './ssrf.ts';
 import type { DnsResolver } from './ssrf.ts';
 import type { SafeFetch } from './crawl.ts';
 
@@ -76,20 +76,7 @@ export function geminiFromEnv(): Gemini | null {
 }
 
 // Resolve DNS por DNS-over-HTTPS para barrar nomes públicos que apontam para IPs internos
-const dohResolver: DnsResolver = async host => {
-  const query = async (type: 'A' | 'AAAA'): Promise<string[]> => {
-    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, {
-      headers: { Accept: 'application/dns-json' }
-    });
-    if (!res.ok) throw new Error(`DoH HTTP ${res.status}`);
-    const body = await res.json();
-    return (body.Answer ?? [])
-      .filter((a: { type: number }) => a.type === (type === 'A' ? 1 : 28))
-      .map((a: { data: string }) => a.data);
-  };
-  const [v4, v6] = await Promise.all([query('A'), query('AAAA').catch(() => [] as string[])]);
-  return [...v4, ...v6];
-};
+const dohResolver: DnsResolver = createDohResolver();
 
 export const safeFetch: SafeFetch = (url, headers) => safeFetchText(url, { resolve: dohResolver, headers });
 
