@@ -24,9 +24,9 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
 
 ## Publicar (nesta ordem)
 
-1. **Banco.** Antes, confira se `brain_chunks` não tem outra restrição que impeça vários trechos por item (a migração já remove UNIQUE só em `item_id`): `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.brain_chunks'::regclass;`. Pré-requisito: `supabase/auth_rls.sql` já executado. Depois aplique a migração, por uma das opções:
-   - `supabase db push --linked` (revise os arquivos antes), ou
-   - cole no SQL Editor do Supabase, **nesta ordem**, `migrations/20261017120000_knowledge_atoms.sql` , `migrations/20261017130000_duplicates.sql` e `migrations/20261017140000_practical_examples.sql`.
+1. **Banco.** Antes, confira se `brain_chunks` não tem outra restrição que impeça vários trechos por item (a migração já remove UNIQUE só em `item_id`): `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.brain_chunks'::regclass;`. Pré-requisito: execute `supabase/auth_rls.sql` no SQL Editor trocando o UUID de zeros pelo User UID do dono (o script aborta se não trocar; o dono fica na tabela `brain_owner`, não dentro da função). Depois desative "Allow new users to sign up" e ative o MFA (TOTP) em Authentication. Em seguida aplique as migrações, por uma das opções:
+   - `supabase db push --linked --include-all` (revise os arquivos antes; `--include-all` é necessário porque `20261017110000_base_schema_rls.sql` é anterior às já aplicadas), ou
+   - cole no SQL Editor do Supabase, **nesta ordem**, `migrations/20261017110000_base_schema_rls.sql` (idempotente: cria o esquema base se faltar e reaplica o RLS e os grants, inclusive de `match_brain_chunks`), `migrations/20261017120000_knowledge_atoms.sql` , `migrations/20261017130000_duplicates.sql` e `migrations/20261017140000_practical_examples.sql`.
 2. **Chave do Gemini** (a mesma usada no n8n; não vai para o repositório):
    ```bash
    supabase secrets set GEMINI_API_KEY=SUA_CHAVE --project-ref eicmqisneklcvhakvgce
@@ -56,7 +56,7 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
 npm test
 ```
 
-Cobre a migração e a busca em um Postgres real (PGlite com pgvector), a extração de links/código, a proteção SSRF, o orquestrador de processamento, a consulta e o renderizador seguro de Markdown. Não chama o Gemini nem o Supabase de produção.
+Cobre o RLS com o SQL real (dono, outro usuário e anon em todas as tabelas e funções), a migração e a busca em um Postgres real (PGlite com pgvector), a extração de links/código, a proteção SSRF, o orquestrador de processamento, a consulta e o renderizador seguro de Markdown. Não chama o Gemini nem o Supabase de produção.
 
 Avaliação de recuperação com os seus dados reais (precisa de login e da chave já publicada):
 

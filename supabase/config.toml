@@ -1,0 +1,9 @@
+# Configuração mínima do projeto para o Supabase CLI (deploy das Edge Functions).
+project_id = "eicmqisneklcvhakvgce"
+
+# O gateway valida o JWT antes de executar a função. Além disso, a própria função confirma o dono (owner_check).
+[functions.brain-ask]
+verify_jwt = true
+
+[functions.brain-process]
+verify_jwt = true
