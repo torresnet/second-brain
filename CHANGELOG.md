@@ -8,6 +8,7 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Alterado
+- **Perguntar em tela cheia no celular:** no celular a conversa passa a ocupar a tela inteira (70% a 85% de área de leitura, antes ~40%). Some o cabeçalho global e o botão "+", sobra uma barra de 44px (voltar, título, limpar), as mensagens e o campo de digitação, cada um na sua linha do grid. Isso acaba com a sobreposição do "+" sobre o botão de enviar e do campo sobre a barra de abas. Os atalhos viram uma faixa rolável e somem após a primeira pergunta. O campo cresce até 4 linhas e a barra de abas sai enquanto o teclado está aberto. O desktop não mudou.
 - **Topo da nota:** a origem aparece logo abaixo do título (link original, ou "Arquivo enviado: nome", "Gravação de voz", "Anotação de texto" quando não há link) e, logo abaixo, a situação da indexação com o **motivo da falha** e o botão "Indexar agora" / "Indexar novamente" (antes ficavam escondidos na seção "Extraído do conteúdo", sem dizer o porquê).
 - **"Próximas ações" virou "Como aplicar na prática":** até 5 exemplos práticos reais (menos é válido). A captura no n8n já gera os exemplos (`practical_examples`) na primeira passada, e a indexação os refina; notas antigas mostram as ações antigas no mesmo formato até serem reprocessadas. O .md exportado segue o mesmo formato.
 

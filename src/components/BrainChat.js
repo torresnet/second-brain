@@ -4,6 +4,7 @@ import { escapeHtml, renderMarkdown } from '../shared/utils/markdown.js';
 import { icon } from '../shared/utils/icons.js';
 
 const MAX_HISTORY_TURNS = 8;
+const MAX_INPUT_HEIGHT_PX = 120;
 
 const SUGGESTIONS = [
   { label: 'Panorama do acervo', query: 'O que você tem salvo aqui? Faça um panorama por assunto.' },
@@ -16,11 +17,12 @@ export function createBrainChat(container, { onOpenItem }) {
   container.innerHTML = `
     <div class="chat-container">
       <div class="chat-header">
+        <button class="chat-back-btn icon-btn" type="button" data-tab="feed" aria-label="Voltar ao acervo">${icon('arrow')}</button>
         <div class="section-heading">
           <h1>Perguntar</h1>
           <p>Pergunte do seu jeito: pelo objetivo, pelo nome, pelo problema ou por uma lembrança vaga.</p>
         </div>
-        <button id="chat-clear-btn" class="chip-btn" type="button">${icon('refresh')}Limpar conversa</button>
+        <button id="chat-clear-btn" class="chip-btn" type="button">${icon('refresh')}Limpar<span class="chat-clear-long"> conversa</span></button>
       </div>
 
       <div class="chat-suggestions">
@@ -34,7 +36,7 @@ export function createBrainChat(container, { onOpenItem }) {
       </div>
 
       <div class="chat-input-bar">
-        <textarea id="chat-user-input" class="chat-textarea" rows="1" maxlength="2000" placeholder="Pergunte ao seu Segundo Cérebro (Enter envia, Shift+Enter quebra linha)"></textarea>
+        <textarea id="chat-user-input" class="chat-textarea" rows="1" maxlength="2000" placeholder="Pergunte ao seu Segundo Cérebro" title="Enter envia, Shift+Enter quebra linha"></textarea>
         <button id="chat-send-btn" class="btn-primary" type="button" aria-label="Enviar">${icon('arrow')}</button>
       </div>
     </div>
@@ -44,10 +46,16 @@ export function createBrainChat(container, { onOpenItem }) {
   const userInput = container.querySelector('#chat-user-input');
   const sendBtn = container.querySelector('#chat-send-btn');
   const clearBtn = container.querySelector('#chat-clear-btn');
+  const chatRoot = container.querySelector('.chat-container');
 
   let history = [];
   let isBusy = false;
   let generation = 0;
+
+  function resizeInput() {
+    userInput.style.height = 'auto';
+    userInput.style.height = `${Math.min(userInput.scrollHeight, MAX_INPUT_HEIGHT_PX)}px`;
+  }
 
   function scrollToEnd() {
     messagesBox.scrollTop = messagesBox.scrollHeight;
@@ -93,8 +101,10 @@ export function createBrainChat(container, { onOpenItem }) {
     isBusy = true;
     const myGeneration = generation;
     sendBtn.disabled = true;
+    chatRoot.classList.add('is-active');
     addUserBubble(text);
     userInput.value = '';
+    resizeInput();
 
     const typing = addAiBubble('<span class="chat-typing">Consultando seu Segundo Cérebro…</span>');
 
@@ -140,6 +150,7 @@ export function createBrainChat(container, { onOpenItem }) {
   });
 
   sendBtn.addEventListener('click', () => handleSend());
+  userInput.addEventListener('input', resizeInput);
   userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -154,6 +165,7 @@ export function createBrainChat(container, { onOpenItem }) {
     isBusy = false;
     sendBtn.disabled = false;
     history = [];
+    chatRoot.classList.remove('is-active');
     messagesBox.innerHTML = '';
     addAiBubble('Conversa limpa. O que você quer encontrar no seu acervo?');
   });

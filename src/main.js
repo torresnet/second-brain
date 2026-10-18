@@ -439,6 +439,7 @@ async function runIndexing() {
  */
 function switchTab(tab) {
   state.currentTab = tab;
+  document.querySelector('.app-layout').dataset.view = tab;
   document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
