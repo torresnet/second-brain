@@ -3,15 +3,8 @@ import { getItemAtoms, getPossibleDuplicates, setDuplicateDecision } from '../sh
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { friendlyError } from '../shared/utils/friendlyError.js';
 import { icon } from '../shared/utils/icons.js';
+import { indexStatus, noteExamples, noteOrigin } from '../shared/utils/noteView.js';
 import { atomCardHtml } from './KnowledgeView.js';
-
-const ANALYSIS_LABELS = {
-  pending: 'Aguardando indexação avançada',
-  processing: 'Indexando…',
-  done: 'Indexada',
-  partial: 'Indexada parcialmente',
-  failed: 'Falha na indexação'
-};
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -43,8 +36,18 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     </header>
 
     <div class="detail-body">
-      <h2 id="detail-title" class="detail-title"></h2>
-      <a id="detail-source-url" class="detail-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+      <div class="detail-top">
+        <h2 id="detail-title" class="detail-title"></h2>
+        <div id="detail-origin" class="detail-origin"></div>
+
+        <section id="detail-index-section" class="detail-index" hidden>
+          <div class="detail-index-text">
+            <strong id="detail-index-label"></strong>
+            <span id="detail-analysis-status" class="detail-hint"></span>
+          </div>
+          <button id="detail-reprocess-btn" class="chip-btn" type="button">Reprocessar</button>
+        </section>
+      </div>
 
       <section id="detail-dup-section" class="detail-callout callout-warn" hidden>
         <div class="detail-label">${icon('alert')}Possível duplicata</div>
@@ -60,24 +63,13 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
       </section>
 
       <section id="detail-atoms-section" hidden>
-        <div class="detail-label-row">
-          <div class="detail-label">${icon('atom')}Extraído do conteúdo <span id="detail-atoms-count" class="detail-count"></span></div>
-          <div class="detail-label-actions">
-            <span id="detail-analysis-status" class="detail-hint"></span>
-            <button id="detail-reprocess-btn" class="chip-btn" type="button">Reprocessar</button>
-          </div>
-        </div>
+        <div class="detail-label">${icon('atom')}Extraído do conteúdo <span id="detail-atoms-count" class="detail-count"></span></div>
         <div id="detail-atoms-list" class="knowledge-list compact"></div>
       </section>
 
       <section id="detail-examples-section" hidden>
         <div class="detail-label">${icon('lightbulb')}Como aplicar na prática</div>
         <div id="detail-examples-list" class="example-list"></div>
-      </section>
-
-      <section id="detail-actions-section" hidden>
-        <div class="detail-label">${icon('check')}Próximas ações</div>
-        <ul id="detail-actions-list" class="detail-checks"></ul>
       </section>
 
       <section id="detail-related-section" hidden>
@@ -113,14 +105,14 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
   const dateEl = $('detail-date');
   const titleEl = $('detail-title');
   const sourceLink = $('detail-source-link');
-  const sourceUrl = $('detail-source-url');
+  const originEl = $('detail-origin');
+  const indexSection = $('detail-index-section');
+  const indexLabel = $('detail-index-label');
   const summaryEl = $('detail-summary');
   const takeawaysSection = $('detail-takeaways-section');
   const takeawaysList = $('detail-takeaways-list');
   const examplesSection = $('detail-examples-section');
   const examplesList = $('detail-examples-list');
-  const actionsSection = $('detail-actions-section');
-  const actionsList = $('detail-actions-list');
   const entitiesSection = $('detail-entities-section');
   const entitiesEl = $('detail-entities');
   const dupSection = $('detail-dup-section');
@@ -174,12 +166,9 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
 
     const hasUrl = Boolean(item.source_url && /^https?:\/\//i.test(item.source_url));
     sourceLink.hidden = !hasUrl;
-    sourceUrl.hidden = !hasUrl;
-    if (hasUrl) {
-      sourceLink.href = item.source_url;
-      sourceUrl.href = item.source_url;
-      sourceUrl.textContent = item.source_url.replace(/^https?:\/\/(www\.)?/, '');
-    }
+    if (hasUrl) sourceLink.href = item.source_url;
+    renderOrigin(item, hasUrl);
+    renderIndexStatus(item);
 
     summaryEl.textContent = item.summary || 'Sem resumo catalogado.';
 
@@ -188,12 +177,6 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     takeawaysSection.hidden = !takeaways.length;
 
     renderExamples(item);
-
-    const legacyActions = Array.isArray(item.action_items) ? item.action_items : [];
-    actionsList.innerHTML = legacyActions
-      .map((a, i) => `<li><input type="checkbox" id="detail-action-${i}" /><label for="detail-action-${i}">${escapeHtml(a)}</label></li>`)
-      .join('');
-    actionsSection.hidden = !legacyActions.length;
 
     const entities = Array.isArray(item.entities) ? item.entities : [];
     entitiesEl.innerHTML = entities.map(e => `<span class="chip">${escapeHtml(e)}</span>`).join('');
@@ -294,29 +277,44 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     if (btn && onOpenRelated) onOpenRelated(btn.dataset.id);
   });
 
+  function renderOrigin(item, hasUrl) {
+    const origin = noteOrigin(item);
+    originEl.innerHTML = hasUrl && origin.href
+      ? `${icon('link')}<a href="${escapeHtml(origin.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(origin.text)}</a>`
+      : `${icon('note')}<span>${escapeHtml(origin.text)}</span>`;
+  }
+
+  function renderIndexStatus(item) {
+    const status = indexStatus(item);
+    indexSection.hidden = !status;
+    if (!status) return;
+    indexSection.dataset.tone = status.tone;
+    indexLabel.textContent = status.label;
+    analysisStatusEl.textContent = status.reason;
+    reprocessBtn.hidden = !onReprocess;
+    reprocessBtn.disabled = false;
+    reprocessBtn.textContent = status.action;
+  }
+
   function renderExamples(item) {
-    const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+    const examples = noteExamples(item);
     examplesList.innerHTML = examples.map((e, i) => `
       <div class="example-card">
         <div class="example-title"><span>${i + 1}</span>${escapeHtml(e.title)}</div>
         ${e.scenario ? `<div class="example-scenario">${escapeHtml(e.scenario)}</div>` : ''}
-        <div class="example-how">${escapeHtml(e.how)}</div>
+        ${e.how ? `<div class="example-how">${escapeHtml(e.how)}</div>` : ''}
         ${Array.isArray(e.uses) && e.uses.length ? `<div class="chip-row">${e.uses.map(u => `<span class="chip">${escapeHtml(u)}</span>`).join('')}</div>` : ''}
       </div>`).join('');
     examplesSection.hidden = !examples.length;
   }
 
   async function renderAtoms(item) {
+    // Só notas indexadas (ou em indexação) têm o que listar; o status e o botão ficam no topo da nota
     const hasStatus = typeof item.analysis_status === 'string';
     atomsSection.hidden = !hasStatus;
     atomsList.innerHTML = '';
     atomsCount.textContent = '';
     if (!hasStatus) return;
-
-    analysisStatusEl.textContent = ANALYSIS_LABELS[item.analysis_status] || '';
-    reprocessBtn.hidden = !onReprocess;
-    reprocessBtn.disabled = false;
-    reprocessBtn.textContent = item.analysis_status === 'done' ? 'Reprocessar' : 'Indexar agora';
 
     try {
       const atoms = await getItemAtoms(item.id);
@@ -369,15 +367,21 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     const item = currentItem;
     reprocessBtn.disabled = true;
     reprocessBtn.textContent = 'Processando…';
+    indexSection.dataset.tone = 'warn';
+    indexLabel.textContent = indexStatus({ analysis_status: 'processing' }).label;
     analysisStatusEl.textContent = 'Isso pode levar até 1 minuto.';
     try {
       const updated = await onReprocess(item.id);
       if (updated && currentItem && currentItem.id === item.id) {
         currentItem = updated;
+        renderIndexStatus(updated);
         renderExamples(updated);
         renderAtoms(updated);
       }
     } catch (err) {
+      if (!currentItem || currentItem.id !== item.id) return;
+      indexSection.dataset.tone = 'danger';
+      indexLabel.textContent = indexStatus({ analysis_status: 'failed' }).label;
       analysisStatusEl.textContent = friendlyError(err);
       reprocessBtn.disabled = false;
       reprocessBtn.textContent = 'Tentar de novo';

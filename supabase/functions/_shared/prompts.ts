@@ -105,7 +105,7 @@ O QUE A NOTA CONTÉM
 ${inventory || '(nenhum item extraído)'}
 
 REGRAS OBRIGATÓRIAS
-1. Escreva ATÉ 5 exemplos diferentes entre si. Pode ser menos de 5 e pode ser uma lista vazia: só inclua um exemplo se o material realmente sustentar.
+1. Escreva ATÉ 5 exemplos práticos e reais, diferentes entre si: situações concretas de trabalho ou do dia a dia em que a pessoa usaria essa informação. Pode ser menos de 5 e pode ser uma lista vazia: só inclua um exemplo se o material realmente sustentar.
 2. Cada exemplo deve combinar dois ou mais itens da nota quando fizer sentido (ex.: ferramenta A + conceito B), mostrando um uso concreto de ponta a ponta.
 3. NUNCA invente ferramentas, comandos, links, recursos ou números que não estão no material. Se faltar informação, escreva um exemplo mais simples ou omita.
 4. "title": curto e específico (o que a pessoa conseguiria fazer). "scenario": a situação real em que ela usaria. "how": como aplicar, em 2 a 4 frases com passos objetivos, citando os nomes dos itens da nota. "uses": nomes (exatos) dos itens da nota usados no exemplo.

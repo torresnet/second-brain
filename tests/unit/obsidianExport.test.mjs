@@ -25,7 +25,7 @@ test('url do frontmatter e do link só aceita http(s) e é escapada', () => {
   assert.equal(safeHttpUrl('https://exemplo.com/a b'), 'https://exemplo.com/a%20b');
   const bad = buildObsidianMarkdown({ title: 't', source_url: 'javascript:alert(1)', source_type: 'article' }, META);
   assert.ok(bad.includes('url: ""'));
-  assert.ok(bad.includes('**Origem:** sem link'));
+  assert.ok(bad.includes('**Origem:** Sem link de origem'));
   const quoted = buildObsidianMarkdown({ title: 't', source_url: 'https://exemplo.com/a")\ninjetado: 1', source_type: 'article' }, META);
   assert.ok(!/^injetado:/m.test(quoted));
 });

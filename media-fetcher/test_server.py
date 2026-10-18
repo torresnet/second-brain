@@ -177,6 +177,30 @@ class YtDlpComandoTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--use-extractors") + 1], "default,-generic")
         self.assertEqual(cmd[-1], "https://www.instagram.com/reel/abc/")
 
+    def test_carrossel_de_imagens_baixa_as_fotos(self):
+        # Post só de imagens: o yt-dlp acusa "No video formats found" e não grava nada sem estas opções
+        capturado = {}
+
+        def fake_run(cmd, timeout):
+            capturado["cmd"] = cmd
+            return mock.Mock(stderr="", stdout="")
+
+        with mock.patch.object(server, "run", side_effect=fake_run), mock.patch("os.listdir", return_value=["01.jpg"]):
+            server.download_with_ytdlp("https://www.instagram.com/p/abc/", "/tmp/x")
+        self.assertIn("--ignore-no-formats-error", capturado["cmd"])
+        self.assertIn("--write-thumbnail", capturado["cmd"])
+
+
+class ArquivosDeMidiaTests(unittest.TestCase):
+    def test_capa_de_video_e_descartada_e_fotos_do_carrossel_ficam(self):
+        nomes = ["01.mp4", "01.jpg", "02.jpg", "03.webp", "03.info.json", "00.info.json"]
+        with mock.patch("os.listdir", return_value=nomes):
+            self.assertEqual(server.media_names("/tmp/x"), ["01.mp4", "02.jpg", "03.webp"])
+
+    def test_capa_de_audio_tambem_e_descartada(self):
+        with mock.patch("os.listdir", return_value=["01.m4a", "01.webp"]):
+            self.assertEqual(server.media_names("/tmp/x"), ["01.m4a"])
+
 
 if __name__ == "__main__":
     unittest.main()

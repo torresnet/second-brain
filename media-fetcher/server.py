@@ -186,6 +186,14 @@ def kind_of(path):
     return None
 
 
+def media_names(workdir):
+    """Arquivos de mídia baixados, em ordem. A capa (--write-thumbnail) de um vídeo/áudio sai com o mesmo
+    nome-base dele e é descartada; imagem sem vídeo correspondente é foto de carrossel e fica."""
+    names = sorted(f for f in os.listdir(workdir) if kind_of(f))
+    playable = {os.path.splitext(n)[0] for n in names if kind_of(n) in ("video", "audio")}
+    return [n for n in names if kind_of(n) != "image" or os.path.splitext(n)[0] not in playable]
+
+
 def probe_duration(path):
     res = run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -246,6 +254,9 @@ def download_with_ytdlp(url, workdir):
         "--max-filesize", str(MAX_DOWNLOAD_BYTES), "--socket-timeout", "20", "--retries", "2",
         "-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b",
         "--merge-output-format", "mp4", "--write-info-json", "--restrict-filenames",
+        # Post/carrossel só de imagens não tem "formato de vídeo": sem isto o yt-dlp aborta sem gravar nada.
+        # A imagem de cada item vem como capa (thumbnail); as capas de vídeos são descartadas em media_names.
+        "--ignore-no-formats-error", "--write-thumbnail",
         "-o", os.path.join(workdir, "%(autonumber)02d.%(ext)s"),
     ]
     if os.path.isfile(COOKIES_FILE):
@@ -300,7 +311,7 @@ def read_metadata(workdir):
 
 def prepare_files(workdir):
     notes = []
-    names = sorted(f for f in os.listdir(workdir) if kind_of(f))
+    names = media_names(workdir)
     videos = [n for n in names if kind_of(n) == "video"]
     audios = [n for n in names if kind_of(n) == "audio"]
     images = [n for n in names if kind_of(n) == "image"][:MAX_IMAGES]

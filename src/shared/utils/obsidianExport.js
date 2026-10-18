@@ -1,6 +1,8 @@
 // Monta o .md exportado para o Obsidian. O conteúdo vem de páginas externas (via IA), então
 // nada é gravado cru: frontmatter com escape YAML e blocos executáveis por plugins neutralizados.
 
+import { noteExamples, noteOrigin } from './noteView.js';
+
 const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f\u2028\u2029]+', 'g');
 const oneLine = (value) => neutralizeExecutable(String(value ?? '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim());
 
@@ -48,14 +50,9 @@ export function buildObsidianMarkdown(item, { stageIcon, stageLabel, dateLabel }
     ? item.key_takeaways.map((t) => `- [ ] ${oneLine(t)}`).join('\n')
     : '- [ ] Nenhum ponto chave catalogado.';
 
-  const examples = Array.isArray(item.practical_examples) ? item.practical_examples : [];
+  const examples = noteExamples(item);
   const examplesSection = examples.length
-    ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${oneLine(e.title)}\n${e.scenario ? `**Cenário:** ${neutralizeExecutable(e.scenario)}\n\n` : ''}${neutralizeExecutable(e.how)}`).join('\n\n')}\n\n---\n\n`
-    : '';
-
-  const legacyActions = Array.isArray(item.action_items) ? item.action_items : [];
-  const actionsSection = legacyActions.length
-    ? `## ⚡ Próximas Ações Práticas (GTD)\n${legacyActions.map((a) => `- [ ] ${oneLine(a)}`).join('\n')}\n\n---\n\n`
+    ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${oneLine(e.title)}${e.scenario ? `\n**Cenário:** ${neutralizeExecutable(e.scenario)}\n` : ''}${e.how ? `\n${neutralizeExecutable(e.how)}` : ''}`).join('\n\n')}\n\n---\n\n`
     : '';
 
   const entities = Array.isArray(item.entities)
@@ -78,7 +75,7 @@ ${tags}
 > [!INFO] Metadados da Nota
 > - **Tipo:** ${sourceType.toUpperCase()}
 > - **Estágio:** ${stageIcon} ${stageLabel}
-> - **Origem:** ${url ? `[Link da Fonte](${markdownLinkTarget(url)})` : 'sem link'}
+> - **Origem:** ${url ? `[Link da Fonte](${markdownLinkTarget(url)})` : oneLine(noteOrigin(item).text)}
 > - **Entidades / Conceitos Relacionados:** ${entitiesFormatted}
 > - **Catalogado em:** ${dateLabel}
 
@@ -94,7 +91,7 @@ ${takeaways}
 
 ---
 
-${examplesSection}${actionsSection}## 📝 Transcrição & Conteúdo Integral
+${examplesSection}## 📝 Transcrição & Conteúdo Integral
 ${neutralizeExecutable(item.raw_content || 'Sem transcrição disponível.')}
 `;
 }
