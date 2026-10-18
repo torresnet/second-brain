@@ -5,6 +5,7 @@ import hmac
 import http.client
 import ipaddress
 import json
+import logging
 import mimetypes
 import os
 import shutil
@@ -13,8 +14,12 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s media-fetcher %(message)s")
+log = logging.getLogger("media-fetcher")
 
 API_KEY = os.environ.get("FETCHER_API_KEY", "")
 COOKIES_FILE = os.environ.get("COOKIES_FILE", "/data/cookies.txt")
@@ -374,6 +379,15 @@ def fetch_media(url):
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+def safe_target(url):
+    """Só o host e o início do caminho: nunca query string, credenciais ou tokens nos logs."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        return f"{parts.hostname or '?'}{parts.path[:40]}"
+    except ValueError:
+        return "?"
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "media-fetcher"
 
@@ -407,13 +421,20 @@ class Handler(BaseHTTPRequestHandler):
             url = str(json.loads(self.rfile.read(length)).get("url", "")).strip()
         except (ValueError, AttributeError):
             return self.send_json(400, {"ok": False, "error": "corpo inválido"})
+        target = safe_target(url)
         if not slots.acquire(timeout=5):
+            log.warning("ocupado target=%s", target)
             return self.send_json(200, {"ok": False, "error": "Serviço ocupado, tente novamente"})
+        started = time.monotonic()
         try:
-            self.send_json(200, fetch_media(url))
+            result = fetch_media(url)
+            log.info("ok target=%s arquivos=%d segundos=%.1f", target, len(result.get("files", [])), time.monotonic() - started)
+            self.send_json(200, result)
         except FetchError as err:
+            log.warning("falha target=%s segundos=%.1f motivo=%s", target, time.monotonic() - started, err)
             self.send_json(200, {"ok": False, "error": str(err)})
         except Exception:
+            log.exception("erro inesperado target=%s segundos=%.1f", target, time.monotonic() - started)
             self.send_json(200, {"ok": False, "error": "Erro inesperado ao processar a mídia"})
         finally:
             slots.release()

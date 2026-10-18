@@ -1,6 +1,8 @@
 // Orquestra o enriquecimento de um item: átomos -> cobertura -> varredura de links -> trechos -> embeddings -> gravação.
 
 import { buildAtomChunkText, ensureCoverage, normalizeAtoms, normalizeKind } from './atoms.ts';
+import { buildEntry, categoryOf } from './errorlog.ts';
+import type { ErrorLogEntry } from './errorlog.ts';
 import type { Atom } from './atoms.ts';
 import { crawlLink } from './crawl.ts';
 import { examplesSearchText, normalizeExamples } from './examples.ts';
@@ -50,6 +52,8 @@ export interface ProcessStore {
   markFailed(id: string, message: string): Promise<void>;
   /** Cota da IA esgotada: volta o item para "pendente" (recuperável) em vez de marcá-lo como falho. */
   markDeferred(id: string, message: string): Promise<void>;
+  /** Histórico de falhas (tabela capture_errors). Opcional: falhar ao registrar nunca interrompe o processamento. */
+  logEvent?(itemId: string, entry: ErrorLogEntry): Promise<void>;
 }
 
 export interface ProcessDeps {
@@ -120,8 +124,20 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
   if (!item) return { ...empty, status: 'not_found' };
   if (!(await store.claim(itemId))) return { ...empty, status: 'busy' };
 
+  const report = async (entry: ErrorLogEntry) => {
+    try {
+      await store.logEvent?.(itemId, buildEntry({
+        ...entry,
+        detail: { source_type: item.source_type, title: item.title, ...entry.detail }
+      }));
+    } catch {
+      // o log nunca pode derrubar o processamento
+    }
+  };
+
   // Sem o conteúdo do link não há o que analisar: não gasta cota da IA e não marca como indexada
   if (isUnreadableCapture(item.tags)) {
+    await report({ stage: 'pipeline', category: 'unreadable', severity: 'error', message: UNREADABLE_MESSAGE });
     await store.markFailed(itemId, UNREADABLE_MESSAGE);
     return { ...empty, status: 'failed', warnings: [UNREADABLE_MESSAGE_FOR_USER] };
   }
@@ -140,6 +156,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     const windows = splitWindows(body || title);
     let failedWindows = 0;
     let quotaWindows = 0;
+    let lastWindowError: unknown = null;
     let category: string | null = null;
     let useCases: string[] = [];
     const rawAtoms: unknown[] = [];
@@ -159,17 +176,20 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
         }
       } catch (error) {
         failedWindows++;
+        lastWindowError = error;
         if (isQuotaError(error)) quotaWindows++;
         warnings.push(`Análise por IA falhou na parte ${index + 1}/${windows.length}: ${errText(error)}`);
       }
     });
 
     if (quotaWindows === windows.length) {
+      await report({ stage: 'ai', category: 'quota', severity: 'warning', message: QUOTA_MESSAGE, detail: { windows: windows.length } });
       await store.markDeferred(itemId, QUOTA_MESSAGE);
       return { ...empty, status: 'quota', warnings: [QUOTA_MESSAGE] };
     }
     if (failedWindows === windows.length) {
       const message = warnings.join(' | ') || 'A análise por IA falhou.';
+      await report({ stage: 'ai', category: categoryOf(lastWindowError), severity: 'error', message, detail: { windows: windows.length } });
       await store.markFailed(itemId, truncate(message, 500));
       return { ...empty, status: 'failed', warnings };
     }
@@ -202,6 +222,14 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
       if (result.status === 'ok') atom.fetched_content = result.text ?? null;
       links[result.status]++;
     }
+    const unreachable = crawled.filter(c => c.result.status === 'inaccessible');
+    if (unreachable.length) {
+      await report({
+        stage: 'crawl', category: 'http', severity: 'warning',
+        message: `${unreachable.length} link(s) não puderam ser lidos na varredura.`,
+        detail: { links: unreachable.map(c => ({ url: c.atom.url, error: c.result.error ?? null })) }
+      });
+    }
 
     // 4) "o que tem dentro" de cada link lido
     const readable = crawled.filter(c => c.result.status === 'ok' && c.result.text);
@@ -219,6 +247,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
         }
       } catch (error) {
         warnings.push(`Não foi possível resumir o conteúdo dos links: ${errText(error)}`);
+        await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Resumo dos links falhou: ${errText(error)}` });
       }
     }
     for (const a of atoms) {
@@ -233,6 +262,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
         if (Array.isArray(out?.examples)) examples = normalizeExamples(out.examples);
       } catch (error) {
         warnings.push(`Não foi possível gerar os exemplos práticos: ${errText(error)}`);
+        await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Exemplos práticos falharam: ${errText(error)}` });
       }
     }
 
@@ -256,7 +286,14 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     const skipVector = new Set(contentIdx.filter((_, n) => n % stride !== 0));
     const toEmbed = planned.map((_, i) => i).filter(i => !skipVector.has(i));
     const embedded = await gemini.embedBatch(toEmbed.map(i => planned[i].content), 'RETRIEVAL_DOCUMENT');
-    if (embedded.errors.length) warnings.push(`Falha ao gerar ${embedded.errors.length} vetor(es) de busca: ${embedded.errors[0]}`);
+    if (embedded.errors.length) {
+      warnings.push(`Falha ao gerar ${embedded.errors.length} vetor(es) de busca: ${embedded.errors[0]}`);
+      await report({
+        stage: 'embedding', category: categoryOf(embedded.errors[0]), severity: 'warning',
+        message: `Falha ao gerar ${embedded.errors.length} vetor(es) de busca: ${embedded.errors[0]}`,
+        detail: { failed: embedded.errors.length, total: toEmbed.length }
+      });
+    }
     const vectorAt = new Map(toEmbed.map((plannedIndex, n) => [plannedIndex, embedded.vectors[n] ?? null]));
     const chunks: ChunkInput[] = planned.map((c, i) => ({ ...c, chunk_index: i, embedding: vectorAt.get(i) ?? null }));
 
@@ -284,6 +321,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     return { status, atoms: saved.atoms, chunks: saved.chunks, links, warnings };
   } catch (error) {
     const message = errText(error);
+    await report({ stage: 'pipeline', category: categoryOf(error), severity: 'error', message, detail: { warnings } });
     try {
       await store.markFailed(itemId, truncate(message, 500));
     } catch {

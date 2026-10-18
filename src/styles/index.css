@@ -1018,3 +1018,22 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Log de falhas da captura */
+.errlog-controls { display: grid; gap: .5rem; margin-top: 1rem; }
+.errlog-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 1rem; }
+.errlog-card.is-resolved { opacity: .6; }
+.errlog-chip-error { color: var(--danger); background: var(--danger-soft); }
+.errlog-date { margin-left: auto; font: 400 11.5px var(--f-mono); color: var(--muted); }
+.errlog-message { overflow-wrap: anywhere; }
+.errlog-detail summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.errlog-detail pre {
+  margin-top: .4rem; padding: .6rem .75rem; max-height: 220px; overflow: auto;
+  background: var(--bg-sunken); border-radius: var(--radius-sm);
+  font: 400 12px var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.errlog-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.nav-count-alert:not(:empty) {
+  color: var(--danger); background: var(--danger-soft);
+  padding: .05rem .4rem; border-radius: 999px; font-weight: 600;
+}

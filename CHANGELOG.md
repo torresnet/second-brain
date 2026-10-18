@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.5.0] - 2026-10-18
+
+### Adicionado
+- **Log de falhas da captura.** Toda falha ou aviso na captura de links, YouTube, Reels, PDFs, áudio, imagem e vídeo passa a ser gravado na nova tabela `capture_errors` (migration `20261018100000_capture_errors.sql`, acesso só do dono via RLS), com etapa (envio, download da mídia, IA, índice de busca, leitura de links, salvamento), categoria (cota, tempo esgotado, rede, HTTP, sessão, conteúdo ilegível, formato não suportado), tipo de mídia, nota relacionada e detalhes técnicos.
+- **Tela "Falhas"** (barra lateral e barra inferior) com contador de pendências, filtros por situação, gravidade e etapa, ação de marcar como resolvida/reabrir, abrir a nota, copiar diagnóstico, resolver tudo e apagar as resolvidas.
+- **Media-fetcher com log estruturado** (sucesso, falha e erro inesperado, com tempo e só host/caminho do link, sem query string nem credenciais). Antes não deixava nenhum rastro.
+- O erro real da conversão de áudio gravado deixa de ser engolido e vai para o log.
+
+### Segurança
+- Tokens, chaves de API e query strings são removidos de mensagens e detalhes antes de gravar no log (cliente e Edge Function).
+
 ## [0.4.2] - 2026-10-17
 
 ### Corrigido

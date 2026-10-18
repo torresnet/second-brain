@@ -4,6 +4,7 @@
 // Exige o token do dono (mesma regra do RLS).
 
 import { geminiFromEnv, json, preflight, readJson, requireOwner, createProcessStore, safeFetch } from '../_shared/runtime.ts';
+import { buildEntry, categoryOf } from '../_shared/errorlog.ts';
 import { processItem } from '../_shared/process.ts';
 import type { ProcessResult } from '../_shared/process.ts';
 
@@ -56,6 +57,14 @@ Deno.serve(async (req: Request) => {
     } catch (error) {
       // O detalhe (pode conter mensagens do banco) fica no log; o cliente recebe só uma mensagem genérica
       console.error('brain-process falhou:', id, error instanceof Error ? error.message : error);
+      try {
+        await store.logEvent?.(id, buildEntry({
+          stage: 'pipeline', category: categoryOf(error), severity: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        }));
+      } catch {
+        // o log nunca pode derrubar a resposta
+      }
       results.push({
         item_id: id, status: 'failed', atoms: 0, chunks: 0, links: { ok: 0, inaccessible: 0, skipped: 0 },
         warnings: ['Erro inesperado ao processar a nota. Tente novamente em instantes.']

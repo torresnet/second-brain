@@ -23,6 +23,8 @@ import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
 import { createKnowledgeView } from './components/KnowledgeView.js';
 import { createAlertCenter } from './components/AlertCenter.js';
+import { createErrorLogView } from './components/ErrorLogView.js';
+import { getOpenCaptureErrorCount, onCaptureErrorsChange } from './shared/services/errorLogService.js';
 import { createCaptureToasts } from './components/CaptureToasts.js';
 import { createCommandPalette } from './components/CommandPalette.js';
 import { createFeedFilters } from './components/FeedFilters.js';
@@ -47,7 +49,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 // Estado da Aplicação
 const state = {
-  currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat'
+  currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat' | 'errors'
   filterType: 'all',
   filterTag: '',
   searchQuery: '',
@@ -64,7 +66,8 @@ const sections = {
   feed: $('section-feed'),
   knowledge: $('section-knowledge'),
   graph: $('section-graph'),
-  chat: $('section-chat')
+  chat: $('section-chat'),
+  errors: $('section-errors')
 };
 const itemsList = $('items-list');
 const emptyState = $('empty-state-container');
@@ -188,6 +191,23 @@ const chat = createBrainChat($('chat-mount-point'), { onOpenItem: openItem });
 const knowledgeView = createKnowledgeView($('knowledge-mount-point'), { onOpenItem: openItem });
 const graphView = createGraphView($('graph-mount-point'), {
   onSelectNode: (item) => { if (item) openItem(item); }
+});
+
+const navCountErrors = $('nav-count-errors');
+const errorLogView = createErrorLogView($('errors-mount-point'), {
+  onOpenItem: openItemById,
+  onChange: refreshErrorCount
+});
+
+async function refreshErrorCount() {
+  const count = await getOpenCaptureErrorCount();
+  navCountErrors.textContent = count ? String(count) : '';
+  navCountErrors.title = count ? `${count} falha(s) de captura pendente(s)` : '';
+}
+
+onCaptureErrorsChange(() => {
+  refreshErrorCount();
+  if (state.currentTab === 'errors') errorLogView.refresh();
 });
 
 // Barra de comando: link captura, pergunta vai para o chat, termo busca no acervo
@@ -418,6 +438,7 @@ function switchTab(tab) {
 
   if (tab === 'graph') graphView.update(state.graphItems, state.itemLinks);
   if (tab === 'knowledge') knowledgeView.refresh();
+  if (tab === 'errors') errorLogView.refresh();
 }
 
 document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -540,6 +561,7 @@ function applySession(session) {
     appLayout.hidden = false;
     checkSharedParams();
     loadDashboardData();
+    refreshErrorCount();
     return;
   }
 

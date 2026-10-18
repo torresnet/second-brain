@@ -127,6 +127,18 @@ export function createProcessStore(supabase: SupabaseClient): ProcessStore {
         .from('brain_items')
         .update({ analysis_status: 'pending', analysis_error: message, analysis_attempts: 0, analysis_updated_at: new Date().toISOString() })
         .eq('id', id);
+    },
+    async logEvent(itemId, entry) {
+      const { error } = await supabase.from('capture_errors').insert({
+        item_id: itemId,
+        stage: entry.stage,
+        category: entry.category,
+        severity: entry.severity,
+        source_type: typeof entry.detail?.source_type === 'string' ? entry.detail.source_type : null,
+        message: entry.message,
+        detail: entry.detail ?? {}
+      });
+      if (error) console.error('brain-process: falha ao registrar no log de falhas:', error.message);
     }
   };
 }

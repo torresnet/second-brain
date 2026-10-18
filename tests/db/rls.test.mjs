@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const OWNER = '11111111-1111-1111-1111-111111111111';
 const STRANGER = '22222222-2222-2222-2222-222222222222';
-const DATA_TABLES = ['brain_items', 'brain_chunks', 'brain_atoms', 'brain_duplicate_decisions'];
+const DATA_TABLES = ['brain_items', 'brain_chunks', 'brain_atoms', 'brain_duplicate_decisions', 'capture_errors'];
 const RPCS = [
   'owner_check', 'is_owner', 'search_brain', 'brain_overview', 'brain_claim_item', 'brain_replace_item_knowledge',
   'brain_item_links', 'brain_set_duplicate_decision', 'brain_find_duplicates_by_url', 'brain_possible_duplicates',
@@ -21,6 +21,7 @@ async function seeded(options = {}) {
   await db.query(`insert into public.brain_atoms (item_id, kind, name) values ($1, 'ferramenta', 'Atomo A')`, [ITEM_A]);
   await db.query(`insert into public.brain_chunks (item_id, content) values ($1, 'trecho A')`, [ITEM_A]);
   await db.query(`insert into public.brain_duplicate_decisions (item_a, item_b) values ($1, $2)`, [ITEM_A, ITEM_B]);
+  await db.query(`insert into public.capture_errors (item_id, message) values ($1, 'falha A')`, [ITEM_A]);
   return db;
 }
 
@@ -66,6 +67,9 @@ test('RLS: usuário autenticado que não é o dono não lê, cria, altera nem ap
     await assert.rejects(db.query(`insert into public.brain_atoms (item_id, kind, name) values ($1, 'ferramenta', 'x')`, [ITEM_A]), /row-level security/);
     assert.equal((await db.query(`update public.brain_items set title = 'hack' returning id`)).rows.length, 0);
     assert.equal((await db.query(`delete from public.brain_items returning id`)).rows.length, 0);
+    await assert.rejects(db.query(`insert into public.capture_errors (message) values ('invasor')`), /row-level security/);
+    assert.equal((await db.query(`update public.capture_errors set resolved_at = now() returning id`)).rows.length, 0);
+    assert.equal((await db.query(`delete from public.capture_errors returning id`)).rows.length, 0);
     await assert.rejects(db.query(`select * from public.brain_owner`), /permission denied/);
 
     assert.equal((await db.query('select public.is_owner() as ok')).rows[0].ok, false);
@@ -100,6 +104,7 @@ test('RLS: o dono tem acesso completo às tabelas e às funções', async () => 
     assert.equal(await count(db, 'brain_atoms'), 1);
     assert.equal(await count(db, 'brain_chunks'), 1);
     assert.equal(await count(db, 'brain_duplicate_decisions'), 1);
+    assert.equal(await count(db, 'capture_errors'), 1);
     assert.deepEqual((await db.query('select public.owner_check() as r')).rows[0].r, { is_owner: true });
     assert.equal((await db.query('select public.brain_overview() as o')).rows[0].o.total_items, 2);
     await db.query(`insert into public.brain_items (title) values ('minha nova nota')`);

@@ -50,6 +50,10 @@ export async function createDb({ applyMigration = true } = {}) {
   return db;
 }
 
+export const CAPTURE_ERRORS_MIGRATION_PATH = fileURLToPath(
+  new URL('../../supabase/migrations/20261018100000_capture_errors.sql', import.meta.url)
+);
+
 const AUTH_RLS_PATH = fileURLToPath(new URL('../../supabase/auth_rls.sql', import.meta.url));
 const BASE_RLS_MIGRATION_PATH = fileURLToPath(new URL('../../supabase/migrations/20261017110000_base_schema_rls.sql', import.meta.url));
 const HARDENING_MIGRATION_PATH = fileURLToPath(new URL('../../supabase/migrations/20261017150000_security_hardening.sql', import.meta.url));
@@ -90,6 +94,7 @@ export async function createRlsDb({ ownerId, legacyMatchFunction = false } = {})
   await db.exec(readFileSync(DUPLICATES_MIGRATION_PATH, 'utf8'));
   await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
   await db.exec(HARDENING_MIGRATION_SQL);
+  await db.exec(readFileSync(CAPTURE_ERRORS_MIGRATION_PATH, 'utf8'));
   return db;
 }
 

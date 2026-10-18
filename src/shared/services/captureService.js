@@ -74,8 +74,8 @@ export async function recordingToWav(blob) {
       view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
     }
     return new Blob([buffer], { type: 'audio/wav' });
-  } catch {
-    throw new Error('Não foi possível processar a gravação de áudio.');
+  } catch (cause) {
+    throw new Error('Não foi possível processar a gravação de áudio.', { cause });
   } finally {
     ctx.close();
   }
