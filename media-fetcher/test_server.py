@@ -202,5 +202,23 @@ class ArquivosDeMidiaTests(unittest.TestCase):
             self.assertEqual(server.media_names("/tmp/x"), ["01.m4a"])
 
 
+class CarrosselDeImagensTests(unittest.TestCase):
+    def test_carrossel_so_de_fotos_vira_arquivos_para_o_gemini(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as workdir:
+            for n in range(1, 11):
+                with open(os.path.join(workdir, f"{n:02d}.jpg"), "wb") as fh:
+                    fh.write(b"\xff\xd8\xff" + bytes([n]) * 1000)
+            with open(os.path.join(workdir, "00.info.json"), "w", encoding="utf-8") as fh:
+                fh.write('{"title": "Post by alguem", "description": "legenda"}')
+            files, notes = server.prepare_files(workdir)
+            meta = server.read_metadata(workdir)
+        self.assertEqual(len(files), 10)
+        self.assertTrue(all(f["mime"] == "image/jpeg" and f["base64"] for f in files))
+        self.assertEqual(notes, [])
+        self.assertEqual(meta["description"], "legenda")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -82,7 +82,7 @@ export function createCaptureModal({ onSubmit }) {
 
       <div class="modal-footer">
         <button id="capture-cancel-btn" class="btn-ghost" type="button">Cancelar</button>
-        <button id="capture-submit-btn" class="btn-primary" type="button">Salvar</button>
+        <button id="capture-submit-btn" class="btn-primary" type="button">Capturar</button>
       </div>
     </div>
   `;
@@ -263,7 +263,7 @@ export function createCaptureModal({ onSubmit }) {
         releaseMic();
         recordedBlob = new Blob(audioChunks, { type: recorder.mimeType || 'audio/webm' });
         voiceRecordBtn.classList.remove('recording');
-        voiceStatusText.innerText = 'Áudio gravado! Clique em Salvar para a IA transcrever, ou no microfone para regravar.';
+        voiceStatusText.innerText = 'Áudio gravado! Clique em Capturar para a IA transcrever, ou no microfone para regravar.';
       };
 
       recorder.start();
@@ -315,6 +315,12 @@ export function createCaptureModal({ onSubmit }) {
     if (!recordedBlob) throw new Error('Grave um áudio antes de salvar.');
     return { kind: 'voice', label: 'Gravação de voz', blob: recordedBlob, seconds: recordSeconds };
   }
+
+  [inputUrl, inputTitleHint].forEach((input) => input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    submitBtn.click();
+  }));
 
   submitBtn.addEventListener('click', () => {
     let spec;

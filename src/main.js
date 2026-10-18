@@ -371,6 +371,9 @@ function relatedFor(id) {
  * Aviso (e ação) para indexar itens antigos que ainda não têm o conhecimento extraído
  */
 let isIndexing = false;
+let autoIndexPausedUntil = 0;
+const AUTO_INDEX_QUOTA_PAUSE_MS = 30 * 60 * 1000;
+const AUTO_INDEX_NO_PROGRESS_PAUSE_MS = 5 * 60 * 1000;
 
 async function refreshIndexBanner() {
   if (isIndexing) return;
@@ -384,6 +387,8 @@ async function refreshIndexBanner() {
     <span id="indexing-progress" class="indexing-progress"></span>
   `;
   indexingBanner.querySelector('#indexing-run-btn').addEventListener('click', runIndexing);
+  // Indexação automática; pausa após cota esgotada ou rodada sem progresso para não entrar em laço
+  if (Date.now() >= autoIndexPausedUntil) runIndexing();
 }
 
 async function runIndexing() {
@@ -413,12 +418,15 @@ async function runIndexing() {
       busyStreak = results.every(r => r.status === 'busy') ? busyStreak + 1 : 0;
       if (busyStreak >= 3 || remaining === 0) break;
     }
+    if (quotaHit) autoIndexPausedUntil = Date.now() + AUTO_INDEX_QUOTA_PAUSE_MS;
+    else if (!processed) autoIndexPausedUntil = Date.now() + AUTO_INDEX_NO_PROGRESS_PAUSE_MS;
     progress.textContent = quotaHit
       ? `${processed} indexado(s). O limite de uso da IA acabou por agora; tente de novo mais tarde.`
       : failures
       ? `${processed} indexado(s); ${failures} falharam (abra a nota e use "Tentar de novo").`
       : `${processed} item(ns) indexado(s).`;
   } catch (err) {
+    autoIndexPausedUntil = Date.now() + AUTO_INDEX_NO_PROGRESS_PAUSE_MS;
     progress.textContent = `Interrompido: ${err.message}`;
   } finally {
     isIndexing = false;
