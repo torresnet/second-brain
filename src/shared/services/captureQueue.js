@@ -84,8 +84,9 @@ export function createCaptureQueue({ execute, findDuplicates, storage, onItemSav
       }
 
       const { message, warning } = await (spec.run ? spec.run() : execute(spec));
-      patchJob(jobId, { status: warning ? 'warning' : 'done', message });
+      // Recarrega o acervo antes de encerrar o job, para a linha provisória não sumir antes do item real
       if (onItemSaved) await onItemSaved();
+      patchJob(jobId, { status: warning ? 'warning' : 'done', message });
     } catch (err) {
       patchJob(jobId, { status: 'error', message: friendlyError(err, 'Falha ao processar a captura.') });
     }

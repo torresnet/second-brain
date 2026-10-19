@@ -16,7 +16,7 @@ import {
 } from './shared/services/supabaseClient.js';
 import { APP_CONFIG } from './shared/constants/config.js';
 import { createLoginScreen } from './components/LoginScreen.js';
-import { createItemRow, skeletonRowsHtml } from './components/ItemRow.js';
+import { createItemRow, createPendingRow, skeletonRowsHtml } from './components/ItemRow.js';
 import { createItemDetail } from './components/ItemDetail.js';
 import { createCaptureModal } from './components/CaptureModal.js';
 import { createBrainChat } from './components/BrainChat.js';
@@ -179,6 +179,11 @@ const captureModal = createCaptureModal({
 });
 
 createCaptureToasts(captureQueue);
+
+// Link enviado aparece no acervo como "processando" até o item real chegar
+captureQueue.subscribe(() => {
+  if (state.currentTab === 'feed') renderItemsList();
+});
 createAlertCenter($('alert-center-mount'), captureQueue, { onOpenItem: openItemById });
 
 window.addEventListener('beforeunload', (e) => {
@@ -312,9 +317,15 @@ function renderListHeader() {
   clearFilterBtn.hidden = !(state.filterType !== 'all' || state.filterTag);
 }
 
+function getPendingLinkJobs() {
+  if (hasActiveFilter()) return [];
+  return captureQueue.getSnapshot().jobs.filter((job) => job.kind === 'link' && job.status === 'processing');
+}
+
 function renderItemsList() {
   itemsList.innerHTML = '';
-  const isEmpty = state.items.length === 0;
+  const pendingJobs = getPendingLinkJobs();
+  const isEmpty = state.items.length === 0 && pendingJobs.length === 0;
   emptyState.hidden = !isEmpty;
   if (isEmpty) {
     const filtered = hasActiveFilter();
@@ -327,6 +338,7 @@ function renderItemsList() {
   }
 
   const fragment = document.createDocumentFragment();
+  pendingJobs.forEach((job) => fragment.appendChild(createPendingRow(job)));
   state.items.forEach(item => {
     fragment.appendChild(createItemRow(item, {
       isSelected: item.id === state.selectedId,

@@ -51,6 +51,30 @@ export function createItemRow(item, { onSelect, onToggleFavorite, isSelected = f
   return row;
 }
 
+/**
+ * Linha provisória de um link enviado que ainda está sendo processado.
+ * Some quando o item real chega do banco.
+ */
+export function createPendingRow(job) {
+  const row = document.createElement('div');
+  row.className = 'item-row is-pending';
+  row.dataset.jobId = job.id;
+  row.setAttribute('role', 'listitem');
+  row.setAttribute('aria-busy', 'true');
+  row.innerHTML = `
+    <span class="type-glyph badge-note">${icon('link')}</span>
+    <div class="row-text">
+      <h3 class="row-title">${escapeHtml(job.label || job.url)}</h3>
+      <p class="row-summary">Link enviado. A IA está lendo e resumindo…</p>
+      <div class="row-meta">
+        <span>Link</span>
+        <span class="meta-warn">processando…</span>
+      </div>
+    </div>
+  `;
+  return row;
+}
+
 export function skeletonRowsHtml(count = 6) {
   return Array.from({ length: count }, () => `
     <div class="item-row skeleton" aria-hidden="true">
