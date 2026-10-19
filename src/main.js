@@ -38,6 +38,7 @@ import { injectIconSprite, icon } from './shared/utils/icons.js';
 import { escapeHtml } from './shared/utils/markdown.js';
 import { friendlyError } from './shared/utils/friendlyError.js';
 import { filterItemsLocally } from './shared/utils/search.js';
+import { SIMILARITY_FLOOR, selectNoteLinks } from './shared/utils/graphModel.js';
 import { pickForReview, createOpenedTracker } from './shared/utils/review.js';
 
 injectIconSprite();
@@ -56,6 +57,7 @@ const state = {
   items: [],
   stats: { total: 0, favorites: 0, byType: {}, topTags: [], topTagCounts: [] },
   itemLinks: [],
+  linksFailed: false,
   graphItems: [],
   selectedId: null
 };
@@ -100,6 +102,10 @@ const detail = createItemDetail({
     }
   },
   getRelated: (id) => relatedFor(id),
+  onShowConnections: (item) => {
+    switchTab('graph');
+    graphView.showLocal(item.id);
+  },
   onMerge: async (keepId, removeId) => {
     await mergeItems(keepId, removeId);
     detail.close();
@@ -195,8 +201,25 @@ window.addEventListener('beforeunload', (e) => {
 const chat = createBrainChat($('chat-mount-point'), { onOpenItem: openItem });
 const knowledgeView = createKnowledgeView($('knowledge-mount-point'), { onOpenItem: openItem });
 const graphView = createGraphView($('graph-mount-point'), {
-  onSelectNode: (item) => { if (item) openItem(item); }
+  onSelectNode: (item) => { if (item) openItem(item); },
+  onFilterTag: (tag) => {
+    filters.setTag(tag);
+    state.filterType = 'all';
+    state.filterTag = tag;
+    switchTab('feed');
+    loadDashboardData();
+  },
+  onRetryLinks: () => loadDashboardData({ quiet: true })
 });
+
+// O grafo recebe o acervo inteiro e, à parte, o que a lista mostra (para a opção "só filtro do Acervo")
+function updateGraphView() {
+  graphView.update(state.graphItems, state.itemLinks, {
+    filteredItems: state.items,
+    isFiltered: hasActiveFilter(),
+    linksFailed: state.linksFailed
+  });
+}
 
 const navCountErrors = $('nav-count-errors');
 const errorLogView = createErrorLogView($('errors-mount-point'), {
@@ -271,10 +294,10 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
   try {
     // O grafo mostra o acervo inteiro: filtros e busca da lista não podem esvaziá-lo
     const filtered = hasActiveFilter();
-    const [items, stats, links, graphItems] = await Promise.all([
+    const [items, stats, linksResult, graphItems] = await Promise.all([
       getBrainItems({ type: state.filterType, tag: state.filterTag, search: state.searchQuery }),
       getBrainStats(),
-      getItemLinks(),
+      getItemLinks({ minSimilarity: SIMILARITY_FLOOR }),
       filtered ? getBrainItems() : null
     ]);
     // Uma recarga mais nova (outro filtro ou busca) já foi pedida: descarta esta resposta
@@ -283,14 +306,15 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
     state.items = items;
     state.graphItems = graphItems ?? items;
     state.stats = stats;
-    state.itemLinks = links;
+    state.itemLinks = linksResult.links;
+    state.linksFailed = linksResult.failed;
 
     navCountFeed.textContent = String(stats.total || 0);
     filters.render(stats);
     renderListHeader();
     renderItemsList();
     renderReview();
-    graphView.update(state.graphItems, state.itemLinks);
+    updateGraphView();
     refreshIndexBanner();
   } catch (err) {
     if (seq !== loadSeq) return;
@@ -372,7 +396,7 @@ function renderReview() {
  * Notas ligadas a uma nota (nas duas direções), da mais forte para a mais fraca
  */
 function relatedFor(id) {
-  return state.itemLinks
+  return selectNoteLinks(state.itemLinks)
     .filter(l => l.source_id === id || l.target_id === id)
     .map(l => {
       const otherIsTarget = l.source_id === id;
@@ -465,7 +489,7 @@ function switchTab(tab) {
   });
   Object.entries(sections).forEach(([name, el]) => { el.hidden = name !== tab; });
 
-  if (tab === 'graph') graphView.update(state.graphItems, state.itemLinks);
+  if (tab === 'graph') updateGraphView();
   if (tab === 'knowledge') knowledgeView.refresh();
   if (tab === 'errors') errorLogView.refresh();
 }

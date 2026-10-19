@@ -264,11 +264,16 @@ export async function getPendingIndexCount() {
 
 /**
  * Ligações entre notas (citam a mesma coisa ou têm assunto parecido).
- * Devolve [] se a migração ainda não foi aplicada: o grafo continua funcionando só com tags/entidades.
+ * `failed` só é true em erro real (rede, permissão): se a migração ainda não foi aplicada,
+ * devolve [] sem alarde e o grafo segue só com tags/entidades.
+ * @returns {Promise<{links: object[], failed: boolean}>}
  */
-export async function getItemLinks() {
-  const { data, error } = await supabase.rpc('brain_item_links');
-  return error ? [] : (data || []);
+export async function getItemLinks({ minSimilarity } = {}) {
+  const params = minSimilarity === undefined ? {} : { p_min_similarity: minSimilarity };
+  const { data, error } = await supabase.rpc('brain_item_links', params);
+  if (!error) return { links: data || [], failed: false };
+  const missing = error.code === 'PGRST202' || error.code === '42883';
+  return { links: [], failed: !missing };
 }
 
 /**

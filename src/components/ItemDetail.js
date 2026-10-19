@@ -12,7 +12,7 @@ const COPY_FEEDBACK_MS = 2000;
  * Ficha da nota. Abre no painel de leitura ao lado da lista (`inline`) ou como janela
  * sobreposta (celular e demais seções). O mesmo elemento é movido entre os dois lugares.
  */
-export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated, onOpenRelated, onMerge, onOpened, onClosed }) {
+export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated, onOpenRelated, onShowConnections, onMerge, onOpened, onClosed }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'item-detail-modal';
@@ -95,6 +95,7 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
 
     <footer class="detail-foot">
       <button id="detail-delete-btn" class="btn-ghost danger" type="button">${icon('trash')}Excluir</button>
+      <button id="detail-graph-btn" class="btn-ghost" type="button" hidden>${icon('graph')}Ver conexões</button>
       <button id="detail-download-md-btn" class="btn-ghost" type="button">${icon('download')}Baixar .md</button>
     </footer>
   `;
@@ -131,6 +132,7 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
   const copyRawBtn = $('detail-copy-raw-btn');
   const downloadMdBtn = $('detail-download-md-btn');
   const deleteBtn = $('detail-delete-btn');
+  const graphBtn = $('detail-graph-btn');
   const closeBtn = $('detail-close-btn');
 
   let currentItem = null;
@@ -393,6 +395,14 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     if (!copyBtn) return;
     const code = copyBtn.closest('.md-code')?.querySelector('code')?.textContent || '';
     if (await copyToClipboard(code)) flash(copyBtn, 'Copiado ✓', 'Copiar');
+  });
+
+  graphBtn.hidden = !onShowConnections;
+  graphBtn.addEventListener('click', () => {
+    if (!currentItem || !onShowConnections) return;
+    const item = currentItem;
+    close();
+    onShowConnections(item);
   });
 
   deleteBtn.addEventListener('click', async () => {

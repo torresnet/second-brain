@@ -56,6 +56,7 @@ export function createFeedFilters({ sideTypes, sideTags, mobileTypes }, { onChan
   return {
     render,
     reset() { current = { type: 'all', tag: '' }; },
+    setTag(tag) { current = { type: 'all', tag }; },
     get: () => ({ ...current })
   };
 }
