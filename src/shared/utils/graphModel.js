@@ -218,22 +218,6 @@ export function localSubgraph(model, centerId, depth = 1) {
   };
 }
 
-/** Pares de notas ligadas, das mais fortes (citam o mesmo) para as mais fracas */
-export function listPairs(model) {
-  return model.links
-    .filter((l) => NOTE_KINDS.has(l.kind))
-    .map((l) => ({
-      aId: l.source.rawItem.id,
-      aTitle: l.source.fullTitle,
-      bId: l.target.rawItem.id,
-      bTitle: l.target.fullTitle,
-      kind: l.kind,
-      weight: l.weight,
-      labels: l.labels ?? []
-    }))
-    .sort((x, y) => (x.kind === y.kind ? y.weight - x.weight : x.kind === 'shared' ? -1 : 1));
-}
-
 export function searchNodes(model, query, limit = 6) {
   const q = normalizeText(query).replace(/^#/, '');
   if (!q) return [];

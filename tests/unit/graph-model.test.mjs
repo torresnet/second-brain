@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   buildGraphModel,
   computeInsights,
-  listPairs,
   localSubgraph,
   neighborsOf,
   searchNodes,
@@ -114,13 +113,6 @@ test('vizinhos de um nó incluem o próprio nó', () => {
   const a = m.byId.get('item-a');
   const set = neighborsOf(m, a);
   assert.ok(set.has(a) && set.has(m.byId.get('item-b')));
-});
-
-test('lista de pares põe "citam o mesmo" antes de "assunto parecido"', () => {
-  const m = buildGraphModel({ items: ITEMS, itemLinks: LINKS });
-  const pairs = listPairs(m);
-  assert.equal(pairs[0].kind, 'shared');
-  assert.equal(pairs.length, 2);
 });
 
 test('busca no grafo ignora acento e caixa, e prioriza notas', () => {
@@ -234,9 +226,8 @@ test('enquadrar tudo coloca todos os nós dentro da área visível', () => {
 
 test('preferências inválidas voltam ao padrão', () => {
   assert.deepEqual(sanitizePrefs(null), DEFAULT_PREFS);
-  const p = sanitizePrefs({ minSimilarity: 5, mode: 'xyz', transform: { x: 1, y: 'a', k: 1 }, hubs: false });
+  const p = sanitizePrefs({ minSimilarity: 5, transform: { x: 1, y: 'a', k: 1 }, hubs: false });
   assert.equal(p.minSimilarity, 0.9);
-  assert.equal(p.mode, 'graph');
   assert.equal(p.transform, null);
   assert.equal(p.hubs, false);
 });
@@ -244,10 +235,9 @@ test('preferências inválidas voltam ao padrão', () => {
 test('preferências são salvas e lidas do armazenamento', () => {
   const store = new Map();
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
-  saveGraphPrefs(storage, { ...DEFAULT_PREFS, hideLoose: true, mode: 'list', transform: { x: 5, y: 6, k: 2 } });
+  saveGraphPrefs(storage, { ...DEFAULT_PREFS, hideLoose: true, transform: { x: 5, y: 6, k: 2 } });
   const loaded = loadGraphPrefs(storage);
   assert.equal(loaded.hideLoose, true);
-  assert.equal(loaded.mode, 'list');
   assert.deepEqual(loaded.transform, { x: 5, y: 6, k: 2 });
 });
 

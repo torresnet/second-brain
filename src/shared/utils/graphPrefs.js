@@ -3,7 +3,6 @@ import { SIMILARITY_FLOOR, SIMILARITY_MAX, DEFAULT_SIMILARITY } from './graphMod
 import { clampZoom } from './graphPhysics.js';
 
 const STORAGE_KEY = 'second-brain.graph.v1';
-const MODES = new Set(['graph', 'list']);
 
 export const DEFAULT_PREFS = Object.freeze({
   hubs: true,
@@ -11,7 +10,6 @@ export const DEFAULT_PREFS = Object.freeze({
   hideLoose: false,
   useFilters: false,
   minSimilarity: DEFAULT_SIMILARITY,
-  mode: 'graph',
   transform: null
 });
 
@@ -31,7 +29,6 @@ export function sanitizePrefs(raw) {
     minSimilarity: Number.isFinite(sim)
       ? Math.min(SIMILARITY_MAX, Math.max(SIMILARITY_FLOOR, sim))
       : DEFAULT_PREFS.minSimilarity,
-    mode: MODES.has(p.mode) ? p.mode : DEFAULT_PREFS.mode,
     transform: sanitizeTransform(p.transform)
   };
 }

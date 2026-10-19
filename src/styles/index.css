@@ -823,8 +823,9 @@ kbd {
 .graph-card [hidden] { display: none !important; }
 .graph-bar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
 .graph-controls { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-.graph-seg { display: inline-flex; gap: .25rem; }
 .graph-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding-top: .75rem; }
+.graph-filters { display: contents; }
+.graph-filters-btn, .gp-handle { display: none; }
 .graph-search { position: relative; flex: 1 1 200px; max-width: 320px; }
 .graph-search input {
   width: 100%; padding: .38rem .7rem;
@@ -870,11 +871,6 @@ kbd {
   cursor: grab; touch-action: none;
 }
 #brain-graph-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.graph-main[data-mode="list"] #brain-graph-canvas,
-.graph-main[data-mode="list"] .graph-zoom,
-.graph-main[data-mode="list"] .graph-tooltip { display: none; }
-.graph-main[data-mode="graph"] .graph-list { display: none; }
-.graph-list { height: 100%; overflow: auto; padding: .4rem .9rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
 .graph-zoom { position: absolute; right: .6rem; bottom: .6rem; display: flex; flex-direction: column; gap: .25rem; }
 .graph-zoom .icon-btn { width: 34px; height: 34px; border: 1px solid var(--line); background: var(--surface); font-size: 18px; line-height: 1; box-shadow: var(--shadow-sm); }
 .graph-empty { position: absolute; inset: 40% 1rem auto; text-align: center; color: var(--muted); }
@@ -906,19 +902,57 @@ kbd {
 .gp-row strong { font-weight: 500; font-size: 13px; overflow-wrap: anywhere; }
 .gp-row span { color: var(--muted); font-size: 12px; }
 .gp-empty, .gp-summary { margin: 0 0 .5rem; color: var(--muted); font-size: 12.5px; }
-.gl-list { margin: 0; padding: 0; list-style: none; }
-.gl-pair { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .5rem; padding: .6rem .1rem; border-bottom: 1px solid var(--line); }
-.gl-pair button { color: var(--accent); font-size: 13px; text-align: left; }
-.gl-pair button:hover { text-decoration: underline; }
-.gl-arrow { color: var(--muted); }
-.gl-why { flex-basis: 100%; color: var(--muted); font-size: 12px; }
 
-@media (max-width: 900px) {
-  .graph-card { height: auto; min-height: calc(100dvh - 8rem); }
-  .graph-stage { flex-direction: column; }
-  .graph-main { flex: none; height: 62dvh; min-height: 300px; }
-  .graph-panel { width: auto; max-height: 45dvh; }
-  .graph-legend .gp-hint { margin-left: 0; }
+/* Celular: grafo em tela quase cheia, painel vira gaveta, filtros recolhem */
+@media (max-width: 859px) {
+  #section-graph { padding: .75rem .75rem 1rem; }
+  .graph-card { height: calc(100dvh - var(--tabbar-h) - 7.6rem - env(safe-area-inset-bottom, 0px)); min-height: 440px; }
+  .graph-card .chip-btn { min-height: 34px; }
+  .graph-bar { flex-wrap: nowrap; align-items: center; gap: .5rem; }
+  .graph-bar .section-heading { min-width: 0; flex: 1; gap: 0; }
+  .graph-bar .section-heading h1 { font-size: 19px; }
+  .graph-bar .section-heading p { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .graph-hint { display: none; }
+  .graph-toolbar { position: relative; flex-wrap: nowrap; gap: .4rem; padding-top: .5rem; }
+  .graph-search { flex: 1 1 0; min-width: 0; max-width: none; }
+  .graph-search input { padding: .5rem .8rem; font-size: 16px; }
+  .graph-filters-btn { display: inline-flex; }
+  .graph-filters {
+    display: none; flex-wrap: wrap; align-items: center; gap: .5rem;
+    position: absolute; z-index: 25; top: calc(100% + .35rem); left: 0; right: 0;
+    padding: .75rem; border: 1px solid var(--line); border-radius: var(--radius-md);
+    background: var(--surface); box-shadow: var(--shadow-pop);
+  }
+  .graph-toolbar[data-open="true"] .graph-filters { display: flex; }
+  .graph-slider { flex-basis: 100%; flex-direction: row; align-items: center; gap: .75rem; }
+  .graph-slider span { white-space: nowrap; }
+  .graph-notice, .graph-local { margin-top: .4rem; padding: .4rem .6rem; }
+  .graph-legend { flex-wrap: nowrap; overflow-x: auto; gap: .9rem; padding: .5rem 0; scrollbar-width: none; }
+  .graph-legend::-webkit-scrollbar { display: none; }
+  .graph-legend span { flex: none; }
+  .graph-legend .gp-hint { display: none; }
+  .graph-stage { position: relative; margin-top: .5rem; }
+  .graph-zoom { top: .6rem; right: .6rem; bottom: auto; }
+  .graph-zoom .icon-btn { width: 40px; height: 40px; }
+  .graph-panel {
+    position: absolute; z-index: 15; left: 0; right: 0; bottom: 0;
+    width: auto; max-height: 56%;
+    padding: 0 .9rem .9rem;
+    border-bottom: 0; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 28px -14px rgba(20, 20, 30, .35);
+    overscroll-behavior: contain;
+  }
+  .graph-panel::before { content: ""; display: block; width: 36px; height: 4px; margin: .5rem auto .35rem; border-radius: 2px; background: var(--line-strong); }
+  .graph-panel[data-state="closed"] { padding-bottom: 0; overflow: hidden; }
+  .graph-panel[data-state="closed"] .gp-body { display: none; }
+  .gp-handle {
+    display: flex; align-items: center; gap: .6rem; width: 100%; padding: .45rem 0 .75rem;
+    position: sticky; top: 0; background: var(--surface); font-size: 14px; font-weight: 600; text-align: left;
+  }
+  .gp-handle-count { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .gp-handle i { margin-left: auto; width: 8px; height: 8px; border-top: 2px solid var(--muted); border-left: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s var(--ease); }
+  .gp-handle[aria-expanded="true"] i { transform: rotate(225deg); }
+  .gp-row { padding: .6rem .7rem; }
 }
 
 /* Notas relacionadas */
@@ -1071,7 +1105,6 @@ kbd {
   .item-row { padding: .75rem 1rem; }
   .fav-btn { opacity: 1; }
 
-  .graph-card { height: calc(100dvh - 12rem); }
 
   /* Perguntar em tela cheia: barra fina, mensagens e campo, cada um na sua linha */
   .app-layout[data-view="chat"] {

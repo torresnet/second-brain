@@ -1,14 +1,9 @@
-import { APP_CONFIG } from '../shared/constants/config.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
 import {
-  SIMILARITY_FLOOR,
-  SIMILARITY_MAX,
   buildGraphModel,
   computeInsights,
-  listPairs,
   localSubgraph,
-  neighborsOf,
-  searchNodes
+  neighborsOf
 } from '../shared/utils/graphModel.js';
 import {
   ALPHA_DECAY,
@@ -20,7 +15,10 @@ import {
   zoomAt
 } from '../shared/utils/graphPhysics.js';
 import { loadGraphPrefs, saveGraphPrefs } from '../shared/utils/graphPrefs.js';
-import { insightsHtml, legendHtml, listHtml, selectionHtml } from './graphPanelHtml.js';
+import { insightsHtml, legendHtml, selectionHtml } from './graphPanelHtml.js';
+import { createGraphSearch } from './graphSearch.js';
+import { GRAPH_TEMPLATE } from './graphTemplate.js';
+import { drawGraph, nodeColor, readPalette } from './graphRenderer.js';
 
 const CLICK_MOVE_TOLERANCE = 5;
 const DOUBLE_CLICK_MS = 350;
@@ -34,47 +32,6 @@ const FIT_EASE = 0.1;
 const FALLBACK_SIZE = { width: 800, height: 600 };
 const REDUCED_MOTION_MAX_TICKS = 600;
 const ALPHA = { fresh: 1, newNodes: 0.5, same: 0.15, drag: 0.3 };
-const FALLBACK_COLOR = '#6C6D75';
-
-// `color` é a chave da paleta lida do tema (ver readPalette); `alpha` suaviza a linha
-const LINK_STYLES = {
-  tag: { color: 'line', alpha: 1, dash: [] },
-  entity: { color: 'entity', alpha: 0.35, dash: [] },
-  shared: { color: 'accent', alpha: 0.8, dash: [] },
-  similar: { color: 'similar', alpha: 0.6, dash: [5, 5] }
-};
-
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-function linkWidth(link) {
-  if (link.kind === 'shared') return 1.5 + Math.min(3, link.weight * 0.7);
-  if (link.kind === 'similar') return 0.8 + clamp((link.weight - 0.5) * 5, 0, 2.2);
-  return 1;
-}
-
-// O canvas não entende var(--cor): resolvemos as variáveis CSS do tema atual
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || FALLBACK_COLOR;
-}
-
-function readPalette() {
-  return {
-    text: cssVar('--text'),
-    muted: cssVar('--muted'),
-    surface: cssVar('--surface'),
-    line: cssVar('--line-strong'),
-    accent: cssVar('--accent'),
-    tag: cssVar('--graph-tag'),
-    entity: cssVar('--graph-entity'),
-    similar: cssVar('--graph-similar')
-  };
-}
-
-function nodeColor(item) {
-  const raw = APP_CONFIG.mediaTypes[item.source_type]?.color || 'var(--badge-note)';
-  const match = raw.match(/^var\((--[\w-]+)\)$/);
-  return match ? cssVar(match[1]) : raw;
-}
 
 function safeStorage() {
   try {
@@ -84,61 +41,12 @@ function safeStorage() {
   }
 }
 
-const TEMPLATE = `
-  <div class="graph-card">
-    <div class="graph-bar">
-      <div class="section-heading">
-        <h1>Conexões</h1>
-        <p id="graph-summary">Como suas notas se conectam.</p>
-      </div>
-      <div class="graph-controls">
-        <div class="graph-seg" role="group" aria-label="Modo de exibição">
-          <button id="graph-mode-graph" class="chip-btn" type="button" aria-pressed="true">Grafo</button>
-          <button id="graph-mode-list" class="chip-btn" type="button" aria-pressed="false">Lista</button>
-        </div>
-        <button id="graph-fit-btn" class="chip-btn" type="button" title="Ajusta o zoom para caber todas as notas">Enquadrar tudo</button>
-      </div>
-    </div>
-    <div class="graph-toolbar">
-      <div class="graph-search">
-        <input id="graph-search" type="search" placeholder="Buscar nota, tag ou entidade" autocomplete="off"
-          role="combobox" aria-label="Buscar no grafo" aria-expanded="false" aria-controls="graph-search-results" aria-autocomplete="list">
-        <ul id="graph-search-results" class="graph-search-results" role="listbox" hidden></ul>
-      </div>
-      <button id="graph-toggle-hubs" class="chip-btn" type="button" title="Mostrar tags e entidades">Tags e entidades</button>
-      <button id="graph-toggle-similar" class="chip-btn" type="button" title="Mostrar notas de assunto parecido">Assunto parecido</button>
-      <button id="graph-toggle-loose" class="chip-btn" type="button" title="Esconde notas sem ligação com nenhuma outra">Ocultar soltas</button>
-      <button id="graph-toggle-filters" class="chip-btn" type="button" title="Mostra só as notas do filtro ou da busca do Acervo">Só filtro do Acervo</button>
-      <label class="graph-slider" title="Quanto mais alto, mais parecidas as notas precisam ser (até 2 por nota)">
-        <span>Semelhança mín. <output id="graph-sim-value"></output></span>
-        <input id="graph-sim" type="range" min="${Math.round(SIMILARITY_FLOOR * 100)}" max="${Math.round(SIMILARITY_MAX * 100)}" step="1">
-      </label>
-    </div>
-    <div id="graph-notice" class="graph-notice" role="status" hidden></div>
-    <div id="graph-local" class="graph-local" hidden></div>
-    <div id="graph-legend" class="graph-legend"></div>
-    <div class="graph-stage">
-      <div class="graph-main" data-mode="graph">
-        <canvas id="brain-graph-canvas" tabindex="0" role="img"></canvas>
-        <div id="graph-list" class="graph-list"></div>
-        <div class="graph-zoom" role="group" aria-label="Zoom">
-          <button id="graph-zoom-in" class="icon-btn" type="button" aria-label="Aproximar">+</button>
-          <button id="graph-zoom-out" class="icon-btn" type="button" aria-label="Afastar">−</button>
-        </div>
-        <div id="graph-empty" class="graph-empty" hidden></div>
-        <div id="graph-tooltip" class="graph-tooltip" hidden></div>
-      </div>
-      <aside id="graph-panel" class="graph-panel" aria-live="polite"></aside>
-    </div>
-  </div>
-`;
-
 /**
  * Aba Conexões. `update(items, links, opts)` recebe o acervo e as ligações;
  * `showLocal(itemId)` abre o grafo local de uma nota.
  */
 export function createGraphView(container, { onSelectNode, onFilterTag, onRetryLinks, storage = safeStorage() }) {
-  container.innerHTML = TEMPLATE;
+  container.innerHTML = GRAPH_TEMPLATE;
   const $ = (selector) => container.querySelector(selector);
   const canvas = $('#brain-graph-canvas');
   const ctx = canvas.getContext('2d');
@@ -148,7 +56,6 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     local: $('#graph-local'),
     legend: $('#graph-legend'),
     main: $('.graph-main'),
-    list: $('#graph-list'),
     empty: $('#graph-empty'),
     tooltip: $('#graph-tooltip'),
     panel: $('#graph-panel'),
@@ -157,8 +64,9 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     slider: $('#graph-sim'),
     sliderValue: $('#graph-sim-value'),
     fitBtn: $('#graph-fit-btn'),
-    modeGraph: $('#graph-mode-graph'),
-    modeList: $('#graph-mode-list'),
+    toolbar: $('#graph-toolbar'),
+    filtersBtn: $('#graph-filters-btn'),
+    filtersCount: $('#graph-filters-count'),
     toggles: {
       hubs: $('#graph-toggle-hubs'),
       similar: $('#graph-toggle-similar'),
@@ -197,8 +105,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
   let noticeTimer = null;
   let prefsTimer = null;
   let simTimer = null;
-  let searchHits = [];
-  let searchIndex = -1;
+  let sheetOpen = false;
 
   // ---------- preferências ----------
 
@@ -338,10 +245,10 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     const total = model.nodes.filter((n) => n.type === 'item').length;
     const parts = [`${total} nota(s)`, `${model.noteLinkCount} ligação(ões) entre notas`];
     if (model.hiddenLoose) parts.push(`${model.hiddenLoose} solta(s) oculta(s)`);
-    el.summary.textContent = inputs.items.length
-      ? `${parts.join(' · ')}. Clique em uma nota, tag ou entidade para ver os detalhes.`
+    el.summary.innerHTML = inputs.items.length
+      ? `${parts.join(' · ')}<span class="graph-hint">. Clique em uma nota, tag ou entidade para ver os detalhes.</span>`
       : 'Como suas notas se conectam.';
-    canvas.setAttribute('aria-label', `Grafo de conexões: ${parts.join(', ')}. Use o modo Lista para navegar pelo teclado.`);
+    canvas.setAttribute('aria-label', `Grafo de conexões: ${parts.join(', ')}. Use as setas para mover, + e − para o zoom, 0 para enquadrar.`);
 
     el.empty.hidden = inputs.items.length > 0;
     el.empty.textContent = 'Nenhuma nota para mostrar ainda. Capture conteúdo e as conexões aparecem aqui.';
@@ -358,16 +265,12 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     syncControls();
     refreshNotice();
     renderPanel();
-    if (prefs.mode === 'list') renderList();
   }
 
   function renderPanel() {
-    el.panel.innerHTML = selection ? selectionHtml(selection, model) : insightsHtml(insights);
+    el.panel.dataset.state = selection ? 'selection' : sheetOpen ? 'open' : 'closed';
+    el.panel.innerHTML = selection ? selectionHtml(selection, model) : insightsHtml(insights, { sheetOpen });
     el.panel.scrollTop = 0;
-  }
-
-  function renderList() {
-    el.list.innerHTML = listHtml(listPairs(model));
   }
 
   function renderLocalBar() {
@@ -389,12 +292,8 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     el.slider.value = String(Math.round(prefs.minSimilarity * 100));
     el.slider.disabled = !prefs.similar;
     el.sliderValue.textContent = `${Math.round(prefs.minSimilarity * 100)}%`;
-    el.modeGraph.classList.toggle('active', prefs.mode === 'graph');
-    el.modeList.classList.toggle('active', prefs.mode === 'list');
-    el.modeGraph.setAttribute('aria-pressed', String(prefs.mode === 'graph'));
-    el.modeList.setAttribute('aria-pressed', String(prefs.mode === 'list'));
-    el.main.dataset.mode = prefs.mode;
-    el.fitBtn.hidden = prefs.mode === 'list';
+    const activeFilters = ['hubs', 'similar', 'hideLoose', 'useFilters'].filter((k) => prefs[k]).length;
+    el.filtersCount.textContent = String(activeFilters);
   }
 
   function notify(text) {
@@ -427,9 +326,14 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     if (rafId === null) rafId = requestAnimationFrame(frame);
   }
 
-  function fitNow() {
+  // Enquadra na área que a gaveta (celular) não cobre
+  function fitTarget() {
     const { width, height } = viewSize();
-    transform = fitTransform(model.nodes, width, height);
+    return fitTransform(model.nodes, width, Math.max(height - sheetInset(), height * 0.4));
+  }
+
+  function fitNow() {
+    transform = fitTarget();
   }
 
   function settleNow() {
@@ -457,7 +361,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
 
   function frame() {
     rafId = null;
-    // Aba ou modo oculto: pausa (retoma em requestFrame quando voltar a ter tamanho)
+    // Aba oculta: pausa (retoma em requestFrame quando voltar a ter tamanho)
     if (!canvas.offsetParent || !resizeCanvas()) return;
     if (alpha > ALPHA_MIN) {
       stepSimulation(model.nodes, model.links, {
@@ -467,7 +371,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
         pinned: draggedNode
       });
       alpha *= ALPHA_DECAY;
-      if (!userMoved) transform = easeTransform(transform, fitTransform(model.nodes, cssWidth, cssHeight), FIT_EASE);
+      if (!userMoved) transform = easeTransform(transform, fitTarget(), FIT_EASE);
       if (alpha <= ALPHA_MIN) {
         savePositions();
         if (!userMoved) fitNow();
@@ -477,60 +381,17 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     if (alpha > ALPHA_MIN) requestFrame();
   }
 
-  function showLabel(node, focus) {
-    if (focus) return focus.set.has(node);
-    const share = clamp((transform.k - 0.35) / 1.15, 0.12, 1);
-    return node.rank < Math.max(6, Math.ceil(model.nodes.length * share));
-  }
-
   function draw() {
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
-    ctx.save();
-    ctx.translate(transform.x, transform.y);
-    ctx.scale(transform.k, transform.k);
-    const focus = currentFocus();
-    const selected = selection?.type === 'node' ? selection.node : null;
-
-    for (const link of model.links) {
-      const style = LINK_STYLES[link.kind];
-      const lit = !focus || (focus.center
-        ? link.source === focus.center || link.target === focus.center
-        : focus.set.has(link.source) && focus.set.has(link.target));
-      ctx.globalAlpha = style.alpha * (lit ? 1 : 0.08);
-      ctx.strokeStyle = palette[style.color];
-      ctx.lineWidth = linkWidth(link) + (focus && lit ? 0.8 : 0);
-      ctx.setLineDash(style.dash);
-      ctx.beginPath();
-      ctx.moveTo(link.source.x, link.source.y);
-      ctx.lineTo(link.target.x, link.target.y);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-
-    const fontPx = clamp(10 / transform.k, 9, 14);
-    ctx.textAlign = 'center';
-    for (const n of model.nodes) {
-      const isHot = n === hoveredNode || n === selected;
-      ctx.globalAlpha = !focus || focus.set.has(n) ? 1 : 0.18;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, isHot ? n.radius + 3 : n.radius, 0, Math.PI * 2);
-      ctx.fillStyle = n.type === 'tag' ? palette.tag : n.type === 'entity' ? palette.entity : n.color;
-      ctx.fill();
-      ctx.strokeStyle = n === selected ? palette.accent : isHot ? palette.text : palette.surface;
-      ctx.lineWidth = n === selected ? 3 : isHot ? 2 : 1.5;
-      ctx.stroke();
-
-      if (!isHot && !showLabel(n, focus)) continue;
-      ctx.font = `${isHot ? 600 : 400} ${fontPx}px Geist, system-ui, sans-serif`;
-      const y = n.y + n.radius + fontPx + 3;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = palette.surface;
-      ctx.strokeText(n.label, n.x, y);
-      ctx.fillStyle = isHot ? palette.text : palette.muted;
-      ctx.fillText(n.label, n.x, y);
-    }
-    ctx.restore();
-    ctx.globalAlpha = 1;
+    drawGraph(ctx, {
+      model,
+      transform,
+      palette,
+      focus: currentFocus(),
+      selected: selection?.type === 'node' ? selection.node : null,
+      hovered: hoveredNode,
+      width: cssWidth,
+      height: cssHeight
+    });
   }
 
   // ---------- navegação ----------
@@ -553,10 +414,16 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     savePrefsSoon();
   }
 
+  // No celular a gaveta cobre a parte de baixo do grafo: centralizamos só na área visível
+  function sheetInset() {
+    if (!window.matchMedia?.('(max-width: 859px)').matches) return 0;
+    return Math.min(el.panel.offsetHeight, cssHeight * 0.6);
+  }
+
   function centerOn(node, minZoom = 1) {
     if (!cssWidth) return;
     const k = clampZoom(Math.max(transform.k, minZoom));
-    moveView({ k, x: cssWidth / 2 - node.x * k, y: cssHeight / 2 - node.y * k });
+    moveView({ k, x: cssWidth / 2 - node.x * k, y: (cssHeight - sheetInset()) / 2 - node.y * k });
   }
 
   function pointerPos(e) {
@@ -579,7 +446,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
   function selectNode(node, { center = false } = {}) {
     selection = { type: 'node', node };
     renderPanel();
-    if (center && prefs.mode === 'graph') centerOn(node);
+    if (center) centerOn(node);
     requestFrame();
   }
 
@@ -598,7 +465,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     }
     selection = { type: 'group', kicker, label, nodes, set: new Set(nodes) };
     renderPanel();
-    if (prefs.mode === 'graph' && cssWidth) moveView(fitTransform(nodes, cssWidth, cssHeight));
+    if (cssWidth) moveView(fitTransform(nodes, cssWidth, Math.max(cssHeight - sheetInset(), 120)));
     requestFrame();
   }
 
@@ -606,7 +473,6 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     local = { id: itemId, depth };
     selection = null;
     userMoved = false;
-    if (prefs.mode === 'list') setMode('graph');
     rebuild();
   }
 
@@ -615,14 +481,6 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     selection = null;
     userMoved = false;
     rebuild();
-  }
-
-  function setMode(mode) {
-    prefs = { ...prefs, mode };
-    syncControls();
-    if (mode === 'list') renderList();
-    requestFrame();
-    savePrefsSoon();
   }
 
   function togglePref(key) {
@@ -807,61 +665,11 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
     action();
   });
 
-  // ---------- busca no grafo ----------
-
-  function closeSearch() {
-    searchHits = [];
-    searchIndex = -1;
-    el.results.hidden = true;
-    el.results.innerHTML = '';
-    el.search.setAttribute('aria-expanded', 'false');
-    el.search.removeAttribute('aria-activedescendant');
-  }
-
-  function renderSearch() {
-    el.results.hidden = searchHits.length === 0;
-    el.search.setAttribute('aria-expanded', String(searchHits.length > 0));
-    el.results.innerHTML = searchHits.map((n, i) => `
-      <li id="graph-hit-${i}" role="option" aria-selected="${i === searchIndex}" class="${i === searchIndex ? 'active' : ''}" data-index="${i}">
-        <strong>${escapeHtml(n.fullTitle)}</strong><span>${n.type === 'item' ? 'nota' : n.type === 'tag' ? 'tag' : 'entidade'}</span>
-      </li>`).join('');
-    if (searchIndex >= 0) el.search.setAttribute('aria-activedescendant', `graph-hit-${searchIndex}`);
-  }
-
-  function chooseHit(index) {
-    const node = searchHits[index];
-    if (!node) return;
-    el.search.value = node.fullTitle;
-    closeSearch();
-    selectNode(node, { center: true });
-  }
-
-  el.search.addEventListener('input', () => {
-    searchHits = searchNodes(model, el.search.value);
-    searchIndex = searchHits.length ? 0 : -1;
-    renderSearch();
-  });
-  el.search.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      el.search.value = '';
-      closeSearch();
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (!searchHits.length) return;
-      e.preventDefault();
-      searchIndex = (searchIndex + (e.key === 'ArrowDown' ? 1 : -1) + searchHits.length) % searchHits.length;
-      renderSearch();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      chooseHit(Math.max(searchIndex, 0));
-    }
-  });
-  el.search.addEventListener('blur', () => setTimeout(closeSearch, 150));
-  el.results.addEventListener('mousedown', (e) => {
-    const li = e.target.closest('li[data-index]');
-    if (li) {
-      e.preventDefault();
-      chooseHit(Number(li.dataset.index));
-    }
+  createGraphSearch({
+    input: el.search,
+    results: el.results,
+    getModel: () => model,
+    onChoose: (node) => selectNode(node, { center: true })
   });
 
   // ---------- botões e ações do painel ----------
@@ -887,6 +695,12 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
       const titleOf = (id) => model.byId.get(`item-${id}`)?.fullTitle ?? 'Sem título';
       focusGroup([a, b], `${titleOf(a)} ↔ ${titleOf(b)}`, 'POSSÍVEL CONEXÃO');
     },
+    'toggle-sheet': () => {
+      sheetOpen = !sheetOpen;
+      renderPanel();
+      if (!userMoved) fitNow();
+      requestFrame();
+    },
     retry: () => onRetryLinks?.()
   };
 
@@ -896,8 +710,11 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
   });
 
   for (const [key, btn] of Object.entries(el.toggles)) btn.addEventListener('click', () => togglePref(key));
-  el.modeGraph.addEventListener('click', () => setMode('graph'));
-  el.modeList.addEventListener('click', () => setMode('list'));
+  el.filtersBtn.addEventListener('click', () => {
+    const open = el.toolbar.dataset.open !== 'true';
+    el.toolbar.dataset.open = String(open);
+    el.filtersBtn.setAttribute('aria-expanded', String(open));
+  });
   el.fitBtn.addEventListener('click', fit);
   $('#graph-zoom-in').addEventListener('click', () => zoomBy(ZOOM_STEP));
   $('#graph-zoom-out').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));

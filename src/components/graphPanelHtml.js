@@ -1,8 +1,6 @@
 import { APP_CONFIG } from '../shared/constants/config.js';
 import { escapeHtml as esc } from '../shared/utils/markdown.js';
 
-const LIST_LIMIT = 300;
-
 const typeLabel = (item) => APP_CONFIG.mediaTypes[item?.source_type]?.label ?? 'Nota';
 const percent = (weight) => `${Math.round(weight * 100)}%`;
 
@@ -65,7 +63,7 @@ export function selectionHtml(selection, model) {
   return selection.node.type === 'item' ? itemPanel(selection.node, model) : hubPanel(selection.node, model);
 }
 
-export function insightsHtml(insights) {
+export function insightsHtml(insights, { sheetOpen = false } = {}) {
   const { topConnected, clusters, suggestions, loose } = insights;
   const summary = `<p class="gp-summary">${insights.totalNotes} nota(s) · ${insights.totalLinks} ligação(ões) entre notas.
     Toque ou clique em uma nota, tag ou entidade para ver os detalhes.</p>`;
@@ -92,25 +90,9 @@ export function insightsHtml(insights) {
     ? `<p class="gp-empty">Sem tags e sem ligações: vale classificar.</p>${loose.sample.map((l) => idRow(l.id, l.title, '')).join('')}`
     : empty('Nenhuma nota solta.'));
 
-  return summary + top + groups + maybe + looseBlock;
-}
-
-export function listHtml(pairs) {
-  if (!pairs.length) {
-    return empty('Nenhuma ligação entre notas ainda. Capture mais conteúdo ou reduza a semelhança mínima.');
-  }
-  const shown = pairs.slice(0, LIST_LIMIT);
-  const rows = shown.map((p) => `
-    <li class="gl-pair">
-      <button type="button" data-action="select-node" data-node-id="item-${esc(p.aId)}">${esc(p.aTitle)}</button>
-      <span class="gl-arrow" aria-hidden="true">↔</span>
-      <button type="button" data-action="select-node" data-node-id="item-${esc(p.bId)}">${esc(p.bTitle)}</button>
-      <span class="gl-why">${esc(reason(p))}</span>
-    </li>`).join('');
-  const more = pairs.length > shown.length
-    ? `<p class="gp-empty">Mostrando ${shown.length} de ${pairs.length} ligações (as mais fortes).</p>`
-    : '';
-  return `<ul class="gl-list">${rows}</ul>${more}`;
+  const handle = `<button type="button" class="gp-handle" data-action="toggle-sheet" aria-expanded="${sheetOpen}">
+    <span>Insights</span><span class="gp-handle-count">${insights.totalLinks} ligação(ões)</span><i aria-hidden="true"></i></button>`;
+  return handle + `<div class="gp-body">${summary + top + groups + maybe + looseBlock}</div>`;
 }
 
 export function legendHtml(items, { hubs, similar, hasShared, hasSimilar }) {
