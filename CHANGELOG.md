@@ -13,6 +13,10 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - **"Próximas ações" virou "Como aplicar na prática":** até 5 exemplos práticos reais (menos é válido). A captura no n8n já gera os exemplos (`practical_examples`) na primeira passada, e a indexação os refina; notas antigas mostram as ações antigas no mesmo formato até serem reprocessadas. O .md exportado segue o mesmo formato.
 
 ### Corrigido
+- **Reels/TikTok sem análise ("getaddrinfo ENOTFOUND media-fetcher")**: o n8n roda em outra rede Docker e o nome curto `media-fetcher` nunca resolveu, então nenhuma captura de rede social chegou ao fetcher. `mediaFetcherUrl` passa a usar o endereço do recurso no Coolify, e o nó tenta de novo uma vez em falha de rede.
+- **Gemini 503 ("This model is currently experiencing high demand")**: o principal tenta 3 vezes com 5 s de intervalo; qualquer falha (não só cota) desvia para a reserva, que usa o modelo alternativo `geminiFallbackModel` (`gemini-flash-lite-latest`) quando o erro não é de cota. O nó "Cota do Gemini estourou?" virou "Gemini falhou?".
+- A nota não mostra mais o JSON cru da API: o erro vira uma frase ("a IA está sobrecarregada...") com a dica de usar "Reprocessar".
+- **Regressão de segurança restaurada**: a exportação do fluxo na v0.4.2 tinha apagado o nó "Exigir Token", a proteção SSRF do "Preparar Conteúdo" e a restrição de CORS (voltou a aceitar `localhost`). Os três voltam, com a validação de URL reescrita sem `new URL()` (ausente no sandbox do n8n) e recusando `\`, `@`, `%` e espaços no endereço. Os testes de SSRF rodam o nó com `URL` indefinido e localizam os nós pelo nome, não pelo ID.
 - **Carrossel de imagens do Instagram** ("Não foi possível acessar ou extrair..."): o yt-dlp abortava com "No video formats found" em posts só de fotos. O media-fetcher agora baixa as imagens do carrossel (`--ignore-no-formats-error --write-thumbnail`) e descarta a capa dos vídeos. **Requer redeploy do media-fetcher.**
 - O nome do arquivo enviado (`metadata.extracted_from_file`) nunca era gravado: o nó "Montar Requisição Gemini" não o repassava ao "Parse".
 

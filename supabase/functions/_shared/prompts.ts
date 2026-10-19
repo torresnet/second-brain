@@ -11,7 +11,16 @@ export interface PromptItem {
   tags: string[] | null;
 }
 
-export function buildAtomizePrompt(item: PromptItem, windowText: string, index: number, total: number): string {
+export function buildAtomizePrompt(
+  item: PromptItem, windowText: string, index: number, total: number, headline: { title: boolean } | null = null
+): string {
+  const titleRule = headline?.title ? '"title": título curto (3 a 8 palavras) que diga sobre o que a nota trata, sem aspas e sem ponto final. ' : '';
+  const headlineRules = headline
+    ? `\n11. CABEÇALHO DA NOTA (campos extras, só nesta resposta): ${titleRule}"summary": 1 a 2 frases dizendo o que a nota contém. "key_takeaways": 2 a 6 pontos-chave, cada um uma frase curta e completa com uma ideia, decisão, fato ou ação da nota; sintetize, não copie o começo do texto (se a nota for muito curta, 1 ou 2 pontos).`
+    : '';
+  const headlineJson = headline
+    ? `${headline.title ? '\n  "title": "...",' : ''}\n  "summary": "...",\n  "key_takeaways": ["..."],`
+    : '';
   return `Você é o indexador de um Segundo Cérebro pessoal: a memória externa fiel de uma pessoa. Seu trabalho é extrair, do material abaixo, TUDO o que ela poderia querer consultar no futuro, como "átomos" (itens discretos e independentes). Nada útil pode se perder.
 
 MATERIAL${total > 1 ? ` (parte ${index + 1} de ${total})` : ''}
@@ -42,10 +51,10 @@ REGRAS OBRIGATÓRIAS
 7. Todo texto (explanation, use_for, questions, tags) em português do Brasil, mesmo que a fonte esteja em outro idioma. Nomes próprios, comandos e código ficam no original.
 8. "name": curto e específico (nome da ferramenta, título do passo a passo, o que o código faz).
 9. "where": momento (ex.: "02:15") ou página, se souber; senão null.
-10. "category": uma palavra (ex.: ia, marketing, automacao, desenvolvimento, design, video, vendas, negocios, produtividade, financas, saude, educacao, outro). "use_cases": 3 a 8 objetivos práticos para os quais este material serve (ex.: "atendimento de clientes no WhatsApp", "criar um CRM").
+10. "category": uma palavra (ex.: ia, marketing, automacao, desenvolvimento, design, video, vendas, negocios, produtividade, financas, saude, educacao, outro). "use_cases": 3 a 8 objetivos práticos para os quais este material serve (ex.: "atendimento de clientes no WhatsApp", "criar um CRM").${headlineRules}
 
 Responda ESTRITAMENTE em JSON neste formato:
-{
+{${headlineJson}
   "category": "ia",
   "use_cases": ["..."],
   "atoms": [
@@ -63,21 +72,6 @@ Responda ESTRITAMENTE em JSON neste formato:
     }
   ]
 }`;
-}
-
-export function buildHeadlinePrompt(content: string, wantTitle: boolean): string {
-  return `Você nomeia e resume anotações de um Segundo Cérebro pessoal. Leia a anotação abaixo e devolva os campos pedidos, em português do Brasil, usando SOMENTE o que está escrito nela (nunca invente).
-
-ANOTAÇÃO:
-"""
-${truncate(content, 6000)}
-"""
-
-CAMPOS
-${wantTitle ? '- "title": título curto (3 a 8 palavras) que diga sobre o que a anotação trata, sem aspas e sem ponto final.\n' : ''}- "summary": 1 a 2 frases objetivas dizendo o que a anotação contém.
-- "key_takeaways": de 2 a 6 pontos-chave, cada um uma frase curta e completa com uma ideia, decisão, fato ou ação da anotação. Não copie o começo do texto: sintetize. Se a anotação for muito curta, devolva só 1 ou 2 pontos.
-
-Responda ESTRITAMENTE em JSON: {${wantTitle ? '"title":"...",' : ''}"summary":"...","key_takeaways":["..."]}`;
 }
 
 export interface PageToSummarize {

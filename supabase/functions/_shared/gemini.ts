@@ -43,7 +43,7 @@ export interface Gemini {
 }
 
 const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
-const EMBED_BATCH_SIZE = 50;
+const EMBED_BATCH_SIZE = 100; // limite do batchEmbedContents
 const EMBED_MAX_CHARS = 7000;
 
 /** Extrai JSON de uma resposta de modelo, tolerando cercas de markdown e texto ao redor. */

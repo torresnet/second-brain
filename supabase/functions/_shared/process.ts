@@ -9,7 +9,7 @@ import { examplesSearchText, normalizeExamples } from './examples.ts';
 import type { PracticalExample } from './examples.ts';
 import type { SafeFetch } from './crawl.ts';
 import type { Gemini } from './gemini.ts';
-import { buildAtomizePrompt, buildExamplesPrompt, buildHeadlinePrompt, buildLinkSummaryPrompt } from './prompts.ts';
+import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt } from './prompts.ts';
 import { chunkText, extractUrls, isUnreadableCapture, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
 
 export interface ItemRow {
@@ -110,7 +110,11 @@ const UNREADABLE_MESSAGE = 'O conteúdo do link não pôde ser lido na captura (
 const UNREADABLE_MESSAGE_FOR_USER = `${UNREADABLE_MESSAGE} Reprocessar não resolve: capture o link novamente.`;
 
 const QUOTA_MESSAGE = 'A IA atingiu o limite de uso por agora. A nota continua salva e será indexada quando a cota voltar: use "Indexar agora" mais tarde.';
-const isQuotaError = (e: unknown) => (e as { status?: number } | null)?.status === 429;
+const OVERLOAD_MESSAGE = 'A IA está sobrecarregada no momento. A nota continua salva e será indexada quando ela voltar: use "Indexar agora" mais tarde.';
+const statusOf = (e: unknown) => (e as { status?: number } | null)?.status ?? 0;
+const isQuotaError = (e: unknown) => statusOf(e) === 429;
+// Cota ou instabilidade do provedor (408/5xx): recuperável, a nota volta para "pendente" em vez de "falha"
+const isDeferrableError = (e: unknown) => isQuotaError(e) || statusOf(e) === 408 || statusOf(e) >= 500;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -130,18 +134,13 @@ function pendingHeadline(item: ItemRow): { title: boolean } | null {
   return pending && typeof pending === 'object' ? { title: pending.title === true } : null;
 }
 
-async function applyHeadline(item: ItemRow, deps: ProcessDeps): Promise<HeadlinePatch | null> {
-  const pending = pendingHeadline(item);
-  const content = item.raw_content?.trim();
-  if (!pending || !content || !deps.store.saveHeadline) return null;
-
-  const out = (await deps.gemini.generateJson(buildHeadlinePrompt(content, pending.title))) as Record<string, unknown>;
+function parseHeadline(out: Record<string, unknown>, pending: { title: boolean }, item: ItemRow): HeadlinePatch | null {
   const clean = (v: unknown, max: number) => (typeof v === 'string' ? truncate(v.trim().replace(/\s+/g, ' '), max) : '');
   const keyTakeaways = (Array.isArray(out?.key_takeaways) ? out.key_takeaways : [])
     .map(t => clean(t, TAKEAWAY_MAX)).filter(Boolean).slice(0, MAX_TAKEAWAYS);
   const summary = clean(out?.summary, SUMMARY_MAX);
   const title = pending.title ? clean(out?.title, TITLE_MAX).replace(/[.\s]+$/, '') : '';
-  if (!keyTakeaways.length || !summary || (pending.title && !title)) throw new Error('A IA não devolveu título/pontos-chave utilizáveis.');
+  if (!keyTakeaways.length || !summary || (pending.title && !title)) return null;
 
   const { pending_headline: _done, ...metadata } = (item.metadata ?? {}) as Record<string, unknown>;
   return { title: title || null, summary, keyTakeaways, metadata };
@@ -185,22 +184,7 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
   const elapsed = () => Date.now() - startedAt;
   const hadKnowledge = item.analysis_status === 'done' || item.analysis_status === 'partial';
   try {
-    // 0) título, resumo e pontos-chave da nota rápida (falhar aqui nunca impede a indexação; fica pendente)
-    try {
-      const headline = await applyHeadline(item, deps);
-      if (headline) {
-        await store.saveHeadline!(itemId, headline);
-        item.title = headline.title ?? item.title;
-        item.summary = headline.summary;
-        item.key_takeaways = headline.keyTakeaways;
-        item.metadata = headline.metadata;
-      }
-    } catch (error) {
-      warnings.push(`Não foi possível gerar título e pontos-chave: ${errText(error)}`);
-      await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Título/pontos-chave falharam: ${errText(error)}` });
-    }
-
-    const title = item.title?.trim() || 'Sem título';
+    let title = item.title?.trim() || 'Sem título';
     const texts = sourceTexts(item);
     const sourceUrls = extractUrls(...texts);
 
@@ -213,6 +197,9 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
     let category: string | null = null;
     let useCases: string[] = [];
     const rawAtoms: unknown[] = [];
+    // Título, resumo e pontos-chave da nota rápida vêm na mesma chamada da 1ª janela (sem requisição extra)
+    const pending = store.saveHeadline ? pendingHeadline(item) : null;
+    let headlineOut: Record<string, unknown> | null = null;
 
     await mapLimit(windows, ATOMIZE_CONCURRENCY, async (windowText, index) => {
       if (elapsed() > WINDOW_DEADLINE_MS) {
@@ -221,7 +208,8 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
         return;
       }
       try {
-        const out = (await gemini.generateJson(buildAtomizePrompt(item, windowText, index, windows.length))) as Record<string, unknown>;
+        const out = (await gemini.generateJson(buildAtomizePrompt(item, windowText, index, windows.length, index === 0 ? pending : null))) as Record<string, unknown>;
+        if (index === 0 && pending) headlineOut = out;
         if (Array.isArray(out?.atoms)) rawAtoms.push(...out.atoms);
         if (!category && typeof out?.category === 'string') category = slugify(out.category).slice(0, 30) || null;
         if (Array.isArray(out?.use_cases)) {
@@ -230,21 +218,38 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
       } catch (error) {
         failedWindows++;
         lastWindowError = error;
-        if (isQuotaError(error)) quotaWindows++;
+        if (isDeferrableError(error)) quotaWindows++;
         warnings.push(`Análise por IA falhou na parte ${index + 1}/${windows.length}: ${errText(error)}`);
       }
     });
 
     if (quotaWindows === windows.length) {
-      await report({ stage: 'ai', category: 'quota', severity: 'warning', message: QUOTA_MESSAGE, detail: { windows: windows.length } });
-      await store.markDeferred(itemId, QUOTA_MESSAGE);
-      return { ...empty, status: 'quota', warnings: [QUOTA_MESSAGE] };
+      const message = isQuotaError(lastWindowError) ? QUOTA_MESSAGE : OVERLOAD_MESSAGE;
+      await report({ stage: 'ai', category: categoryOf(lastWindowError), severity: 'warning', message, detail: { windows: windows.length } });
+      await store.markDeferred(itemId, message);
+      return { ...empty, status: 'quota', warnings: [message] };
     }
     if (failedWindows === windows.length) {
       const message = warnings.join(' | ') || 'A análise por IA falhou.';
       await report({ stage: 'ai', category: categoryOf(lastWindowError), severity: 'error', message, detail: { windows: windows.length } });
       await store.markFailed(itemId, truncate(message, 500));
       return { ...empty, status: 'failed', warnings };
+    }
+
+    if (pending && headlineOut) {
+      try {
+        const headline = parseHeadline(headlineOut, pending, item);
+        if (!headline) throw new Error('A IA não devolveu título/pontos-chave utilizáveis.');
+        await store.saveHeadline!(itemId, headline);
+        item.title = headline.title ?? item.title;
+        item.summary = headline.summary;
+        item.key_takeaways = headline.keyTakeaways;
+        item.metadata = headline.metadata;
+        title = item.title?.trim() || title;
+      } catch (error) {
+        warnings.push(`Não foi possível gerar título e pontos-chave: ${errText(error)}`);
+        await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Título/pontos-chave falharam: ${errText(error)}` });
+      }
     }
 
     let atoms = normalizeAtoms(rawAtoms, newId, sourceUrls);

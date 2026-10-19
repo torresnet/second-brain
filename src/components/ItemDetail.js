@@ -62,14 +62,14 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
         <ul id="detail-takeaways-list" class="detail-bullets"></ul>
       </section>
 
-      <section id="detail-atoms-section" hidden>
-        <div class="detail-label">${icon('atom')}Extraído do conteúdo <span id="detail-atoms-count" class="detail-count"></span></div>
-        <div id="detail-atoms-list" class="knowledge-list compact"></div>
-      </section>
-
       <section id="detail-examples-section" hidden>
         <div class="detail-label">${icon('lightbulb')}Como aplicar na prática</div>
         <div id="detail-examples-list" class="example-list"></div>
+      </section>
+
+      <section id="detail-atoms-section" hidden>
+        <div class="detail-label">${icon('atom')}Extraído do conteúdo <span id="detail-atoms-count" class="detail-count"></span></div>
+        <div id="detail-atoms-list" class="knowledge-list compact"></div>
       </section>
 
       <section id="detail-related-section" hidden>

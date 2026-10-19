@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 const WORKFLOW = fileURLToPath(new URL('../../n8n/second_brain_workflow.json', import.meta.url));
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const code = JSON.parse(readFileSync(WORKFLOW, 'utf8')).nodes.find(n => n.id === 'prepare-content').parameters.jsCode;
+const code = JSON.parse(readFileSync(WORKFLOW, 'utf8')).nodes.find(n => n.name === 'Preparar Conteúdo').parameters.jsCode;
 
 const workflow = JSON.parse(readFileSync(WORKFLOW, 'utf8'));
 
 test('n8n: webhook recusa cedo requisição sem Bearer e não libera origem localhost', async () => {
-  const gate = workflow.nodes.find(n => n.id === 'require-token').parameters.jsCode;
+  const gate = workflow.nodes.find(n => n.name === 'Exigir Token').parameters.jsCode;
   const run = (headers) => new AsyncFunction('$input', gate)({ first: () => ({ json: { headers } }), all: () => [{ json: { headers } }] });
   await assert.rejects(run({}), /Não autenticado/);
   await assert.rejects(run({ authorization: 'Basic abc' }), /Não autenticado/);
@@ -19,7 +19,7 @@ test('n8n: webhook recusa cedo requisição sem Bearer e não libera origem loca
 
   assert.deepEqual(workflow.connections['Webhook Captura'].main[0].map(c => c.node), ['Exigir Token']);
   assert.deepEqual(workflow.connections['Exigir Token'].main[0].map(c => c.node), ['Configuração']);
-  const origins = workflow.nodes.find(n => n.id === 'webhook-trigger').parameters.options.allowedOrigins;
+  const origins = workflow.nodes.find(n => n.name === 'Webhook Captura').parameters.options.allowedOrigins;
   assert.ok(!/localhost/.test(origins), origins);
 });
 
@@ -42,7 +42,7 @@ async function runNode(url, { pages = {}, dns = {}, failAaaa = false } = {}) {
     }
   };
   const input = { strategy: 'web', url, sourceType: 'article', fileBase64: null, fileMime: '' };
-  const [{ json }] = await new AsyncFunction('$input', code).call({ helpers }, { first: () => ({ json: input }) });
+  const [{ json }] = await new AsyncFunction('$input', 'URL', code).call({ helpers }, { first: () => ({ json: input }) }, undefined); // URL ausente, como no sandbox do n8n
   return { out: json, pageCalls };
 }
 
@@ -52,7 +52,8 @@ test('n8n: endereços internos nunca são buscados', async () => {
   for (const url of [
     'http://127.0.0.1/', 'http://localhost/', 'http://media-fetcher:8080/health', 'http://169.254.169.254/latest/meta-data',
     'http://[::1]/', 'http://[::ffff:127.0.0.1]/', 'http://10.0.0.5/', 'file:///etc/passwd', 'http://user:pw@exemplo.com/',
-    'https://exemplo.com:8443/', 'http://servico.internal/'
+    'https://exemplo.com:8443/', 'http://servico.internal/',
+    'http://127.0.0.1\\@exemplo.com/', 'http://exemplo.com%2f@127.0.0.1/', 'http://127.0.0.%31/', 'http://2130706433/'
   ]) {
     assert.ok(blocked(await runNode(url)), url);
   }
@@ -95,5 +96,13 @@ test('n8n: redirect legítimo entre sites públicos é seguido e revalidado', as
     pages: { 'http://exemplo.com/': { statusCode: 301, headers: { location: 'https://www.exemplo.com/' }, body: Buffer.from('') } }
   });
   assert.equal(res.pageCalls.length, 2);
+  assert.ok(res.out.pageText.includes('texto legível'));
+});
+
+test('n8n: redirect relativo é resolvido sem o construtor URL', async () => {
+  const res = await runNode('https://exemplo.com/a/b', {
+    pages: { 'https://exemplo.com/a/b': { statusCode: 302, headers: { location: 'c?x=1' }, body: Buffer.from('') } }
+  });
+  assert.deepEqual(res.pageCalls.map(c => c.url), ['https://exemplo.com/a/b', 'https://exemplo.com/a/c?x=1']);
   assert.ok(res.out.pageText.includes('texto legível'));
 });

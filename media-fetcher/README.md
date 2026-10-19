@@ -8,7 +8,7 @@ O serviço baixa a mídia com **yt-dlp** (plataformas conhecidas) ou por downloa
 
 1. Novo recurso → Dockerfile → este repositório, _Base Directory_ `/media-fetcher`.
 2. Variável de ambiente obrigatória: `FETCHER_API_KEY` (um segredo longo e aleatório).
-3. **Não exponha publicamente.** Mantenha na mesma rede do n8n e use a URL interna (ex.: `http://media-fetcher:8080`).
+3. A URL precisa ser resolvível **a partir do container do n8n**. No Coolify o n8n (serviço) fica numa rede própria e não enxerga o nome `media-fetcher`, então hoje usamos o domínio do recurso (`http://<uuid>.<ip>.sslip.io`), protegido pela `X-Api-Key`. Para tirar do ar público: ative "Connect to Predefined Network" no serviço do n8n, dê ao fetcher o alias de rede `media-fetcher`, remova o domínio dele e volte `mediaFetcherUrl` para `http://media-fetcher:8080`.
 4. Volume persistente em `/data` (opcional, para `cookies.txt`).
 5. No n8n:
    - Nó **Configuração** → `mediaFetcherUrl` com a URL interna do serviço.

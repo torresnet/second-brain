@@ -327,14 +327,16 @@ test('nota rápida: a IA gera título (se não digitado), resumo e pontos-chave 
   }));
   store.calls.headline = [];
   store.saveHeadline = async (id, patch) => { store.calls.headline.push({ id, patch }); };
-  const gemini = fakeGemini({ atomize: baseAtomize });
-  const original = gemini.generateJson;
-  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações')
-    ? { title: 'Renovar domínio e cobrar proposta.', summary: 'Duas tarefas pendentes.', key_takeaways: ['Renovar o domínio até sexta', ' ', 'Cobrar o cliente da proposta'] }
-    : original(prompt));
+  const gemini = fakeGemini({
+    atomize: { ...baseAtomize, title: 'Renovar domínio e cobrar proposta.', summary: 'Duas tarefas pendentes.', key_takeaways: ['Renovar o domínio até sexta', ' ', 'Cobrar o cliente da proposta'] }
+  });
 
   await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
 
+  const atomizeCalls = gemini.calls.prompts.filter(p => p.includes('indexador de um Segundo Cérebro'));
+  assert.equal(atomizeCalls.length, 1);
+  assert.match(atomizeCalls[0], /CABEÇALHO DA NOTA/);
+  assert.equal(gemini.calls.prompts.length, 3, 'análise (com cabeçalho) + resumo do link + exemplos, sem chamada extra para o título');
   assert.equal(store.calls.headline.length, 1);
   const { patch } = store.calls.headline[0];
   assert.equal(patch.title, 'Renovar domínio e cobrar proposta');
@@ -346,13 +348,11 @@ test('nota rápida com título digitado: mantém o título e só gera pontos-cha
   const store = fakeStore(item({ source_type: 'note', metadata: { pending_headline: { title: false } } }));
   store.calls.headline = [];
   store.saveHeadline = async (id, patch) => { store.calls.headline.push(patch); };
-  const gemini = fakeGemini({ atomize: baseAtomize });
-  const original = gemini.generateJson;
-  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações')
-    ? { title: 'Outro título', summary: 'Resumo novo.', key_takeaways: ['Ponto A'] }
-    : original(prompt));
+  const gemini = fakeGemini({ atomize: { ...baseAtomize, title: 'Outro título', summary: 'Resumo novo.', key_takeaways: ['Ponto A'] } });
 
   await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.doesNotMatch(gemini.calls.prompts[0], /"title": "\.\.\."/);
 
   assert.equal(store.calls.headline[0].title, null);
   assert.deepEqual(store.calls.headline[0].keyTakeaways, ['Ponto A']);
@@ -362,13 +362,25 @@ test('nota rápida: se a IA falhar no título, a pendência continua e a indexa�
   const store = fakeStore(item({ source_type: 'note', metadata: { pending_headline: { title: true } } }));
   store.calls.headline = [];
   store.saveHeadline = async (id, patch) => { store.calls.headline.push(patch); };
-  const gemini = fakeGemini({ atomize: baseAtomize });
-  const original = gemini.generateJson;
-  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações') ? { title: '', key_takeaways: [] } : original(prompt));
+  const gemini = fakeGemini({ atomize: { ...baseAtomize, title: '', key_takeaways: [] } });
 
   const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
 
   assert.equal(store.calls.headline.length, 0);
   assert.equal(store.calls.replace.length, 1);
   assert.ok(result.warnings.some(w => w.includes('título e pontos-chave')));
+});
+
+test('IA sobrecarregada (5xx) em todas as partes: nota volta para pendente, não para falha', async () => {
+  const store = fakeStore(item());
+  store.calls.deferred = [];
+  store.markDeferred = async (id, msg) => { store.calls.deferred.push({ id, msg }); };
+  const gemini = fakeGemini({ atomize: () => { throw Object.assign(new Error('x'), { status: 503 }); } });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'quota');
+  assert.equal(store.calls.failed.length, 0);
+  assert.equal(store.calls.deferred.length, 1);
+  assert.match(store.calls.deferred[0].msg, /sobrecarregada/);
 });
