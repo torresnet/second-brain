@@ -116,6 +116,16 @@ export function createProcessStore(supabase: SupabaseClient): ProcessStore {
       const { error } = await supabase.rpc('brain_set_practical_examples', { p_item_id: id, p_examples: examples });
       if (error) throw new Error(error.message);
     },
+    async saveHeadline(id, headline) {
+      const patch: Record<string, unknown> = {
+        summary: headline.summary,
+        key_takeaways: headline.keyTakeaways,
+        metadata: headline.metadata
+      };
+      if (headline.title) patch.title = headline.title;
+      const { error } = await supabase.from('brain_items').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async markFailed(id, message) {
       await supabase
         .from('brain_items')

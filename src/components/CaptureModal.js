@@ -5,6 +5,7 @@ import {
   ACCEPTED_FILE_TYPES
 } from '../shared/services/captureService.js';
 import { icon } from '../shared/utils/icons.js';
+import { provisionalTitle } from '../shared/services/captureExecutor.js';
 
 export function createCaptureModal({ onSubmit }) {
   const overlay = document.createElement('div');
@@ -45,7 +46,7 @@ export function createCaptureModal({ onSubmit }) {
 
         <!-- Painel 2: Anotação de Texto -->
         <div id="panel-note" style="display: none;">
-          <input type="text" id="input-note-title" placeholder="Título da Anotação..." 
+          <input type="text" id="input-note-title" placeholder="Título (opcional: a IA nomeia pelo assunto)"
                  class="field" />
           <textarea id="input-note-body" placeholder="Escreva suas ideias, aprendizados ou síntese..." 
                     rows="5" class="field field-area"></textarea>
@@ -301,9 +302,9 @@ export function createCaptureModal({ onSubmit }) {
     if (activeMode === 'note') {
       const body = inputNoteBody.value.trim();
       if (!body) throw new Error('O corpo da anotação não pode ficar vazio.');
-      const title = inputNoteTitle.value.trim() || 'Nota Rápida';
+      const title = inputNoteTitle.value.trim();
       const tags = inputNoteTags.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      return { kind: 'note', label: title, title, body, tags };
+      return { kind: 'note', label: title || provisionalTitle(body), title, body, tags };
     }
 
     if (activeMode === 'file') {

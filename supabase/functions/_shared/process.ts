@@ -9,7 +9,7 @@ import { examplesSearchText, normalizeExamples } from './examples.ts';
 import type { PracticalExample } from './examples.ts';
 import type { SafeFetch } from './crawl.ts';
 import type { Gemini } from './gemini.ts';
-import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt } from './prompts.ts';
+import { buildAtomizePrompt, buildExamplesPrompt, buildHeadlinePrompt, buildLinkSummaryPrompt } from './prompts.ts';
 import { chunkText, extractUrls, isUnreadableCapture, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
 
 export interface ItemRow {
@@ -44,11 +44,20 @@ export interface ReplaceArgs {
   error: string | null;
 }
 
+export interface HeadlinePatch {
+  title: string | null;
+  summary: string;
+  keyTakeaways: string[];
+  metadata: Record<string, unknown>;
+}
+
 export interface ProcessStore {
   getItem(id: string): Promise<ItemRow | null>;
   claim(id: string): Promise<boolean>;
   replace(args: ReplaceArgs): Promise<{ atoms: number; chunks: number }>;
   saveExamples(id: string, examples: PracticalExample[]): Promise<void>;
+  /** Grava título (se houver), resumo, pontos-chave e o metadata já sem a pendência de cabeçalho. */
+  saveHeadline?(id: string, headline: HeadlinePatch): Promise<void>;
   markFailed(id: string, message: string): Promise<void>;
   /** Cota da IA esgotada: volta o item para "pendente" (recuperável) em vez de marcá-lo como falho. */
   markDeferred(id: string, message: string): Promise<void>;
@@ -109,6 +118,35 @@ function listText(value: unknown): string {
   return Array.isArray(value) ? value.map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join('; ') : '';
 }
 
+const MAX_TAKEAWAYS = 6;
+const TITLE_MAX = 90;
+const TAKEAWAY_MAX = 220;
+const SUMMARY_MAX = 400;
+
+/** Notas rápidas entram com título/pontos-chave provisórios; a IA os refaz a partir do texto da nota. */
+function pendingHeadline(item: ItemRow): { title: boolean } | null {
+  const meta = item.metadata as { pending_headline?: { title?: unknown } } | null;
+  const pending = meta?.pending_headline;
+  return pending && typeof pending === 'object' ? { title: pending.title === true } : null;
+}
+
+async function applyHeadline(item: ItemRow, deps: ProcessDeps): Promise<HeadlinePatch | null> {
+  const pending = pendingHeadline(item);
+  const content = item.raw_content?.trim();
+  if (!pending || !content || !deps.store.saveHeadline) return null;
+
+  const out = (await deps.gemini.generateJson(buildHeadlinePrompt(content, pending.title))) as Record<string, unknown>;
+  const clean = (v: unknown, max: number) => (typeof v === 'string' ? truncate(v.trim().replace(/\s+/g, ' '), max) : '');
+  const keyTakeaways = (Array.isArray(out?.key_takeaways) ? out.key_takeaways : [])
+    .map(t => clean(t, TAKEAWAY_MAX)).filter(Boolean).slice(0, MAX_TAKEAWAYS);
+  const summary = clean(out?.summary, SUMMARY_MAX);
+  const title = pending.title ? clean(out?.title, TITLE_MAX).replace(/[.\s]+$/, '') : '';
+  if (!keyTakeaways.length || !summary || (pending.title && !title)) throw new Error('A IA não devolveu título/pontos-chave utilizáveis.');
+
+  const { pending_headline: _done, ...metadata } = (item.metadata ?? {}) as Record<string, unknown>;
+  return { title: title || null, summary, keyTakeaways, metadata };
+}
+
 function sourceTexts(item: ItemRow): string[] {
   return [
     item.raw_content, item.summary, listText(item.key_takeaways), listText(item.entities),
@@ -147,6 +185,21 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
   const elapsed = () => Date.now() - startedAt;
   const hadKnowledge = item.analysis_status === 'done' || item.analysis_status === 'partial';
   try {
+    // 0) título, resumo e pontos-chave da nota rápida (falhar aqui nunca impede a indexação; fica pendente)
+    try {
+      const headline = await applyHeadline(item, deps);
+      if (headline) {
+        await store.saveHeadline!(itemId, headline);
+        item.title = headline.title ?? item.title;
+        item.summary = headline.summary;
+        item.key_takeaways = headline.keyTakeaways;
+        item.metadata = headline.metadata;
+      }
+    } catch (error) {
+      warnings.push(`Não foi possível gerar título e pontos-chave: ${errText(error)}`);
+      await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Título/pontos-chave falharam: ${errText(error)}` });
+    }
+
     const title = item.title?.trim() || 'Sem título';
     const texts = sourceTexts(item);
     const sourceUrls = extractUrls(...texts);

@@ -65,6 +65,21 @@ Responda ESTRITAMENTE em JSON neste formato:
 }`;
 }
 
+export function buildHeadlinePrompt(content: string, wantTitle: boolean): string {
+  return `Você nomeia e resume anotações de um Segundo Cérebro pessoal. Leia a anotação abaixo e devolva os campos pedidos, em português do Brasil, usando SOMENTE o que está escrito nela (nunca invente).
+
+ANOTAÇÃO:
+"""
+${truncate(content, 6000)}
+"""
+
+CAMPOS
+${wantTitle ? '- "title": título curto (3 a 8 palavras) que diga sobre o que a anotação trata, sem aspas e sem ponto final.\n' : ''}- "summary": 1 a 2 frases objetivas dizendo o que a anotação contém.
+- "key_takeaways": de 2 a 6 pontos-chave, cada um uma frase curta e completa com uma ideia, decisão, fato ou ação da anotação. Não copie o começo do texto: sintetize. Se a anotação for muito curta, devolva só 1 ou 2 pontos.
+
+Responda ESTRITAMENTE em JSON: {${wantTitle ? '"title":"...",' : ''}"summary":"...","key_takeaways":["..."]}`;
+}
+
 export interface PageToSummarize {
   n: number;
   url: string;

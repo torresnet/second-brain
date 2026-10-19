@@ -106,15 +106,25 @@ async function saveLink({ url, hint }) {
   return { message: piped.notice || 'Salvo com sucesso no seu Segundo Cérebro!', warning: Boolean(piped.notice) };
 }
 
+const PROVISIONAL_TITLE_MAX = 60;
+
+// Título provisório (primeira linha da nota) até a IA nomear a nota pelo assunto
+export function provisionalTitle(body) {
+  const firstLine = body.split('\n').map((l) => l.trim()).find(Boolean) || 'Nota Rápida';
+  return firstLine.length > PROVISIONAL_TITLE_MAX ? `${firstLine.slice(0, PROVISIONAL_TITLE_MAX - 1).trimEnd()}…` : firstLine;
+}
+
 async function saveNote({ title, body, tags }) {
+  const typedTitle = (title || '').trim();
   await insertBrainItem({
-    title,
+    title: typedTitle || provisionalTitle(body),
     summary: clip(body),
     source_type: 'note',
     source_url: null,
     raw_content: body,
     key_takeaways: [body.slice(0, 80)],
-    tags: tags.length ? tags : ['nota-pessoal']
+    tags: tags.length ? tags : ['nota-pessoal'],
+    metadata: { pending_headline: { title: !typedTitle } }
   });
   return { message: 'Nota salva no seu Segundo Cérebro!', warning: false };
 }

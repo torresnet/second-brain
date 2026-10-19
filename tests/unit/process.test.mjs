@@ -318,3 +318,57 @@ test('exemplos práticos: resposta fora do formato é ignorada sem derrubar o pr
   assert.equal(result.status, 'done');
   assert.equal(store.calls.examples.length, 0);
 });
+
+test('nota rápida: a IA gera título (se não digitado), resumo e pontos-chave e limpa a pendência', async () => {
+  const store = fakeStore(item({
+    title: 'Preciso lembrar de', source_type: 'note', source_url: null, summary: 'Preciso lembrar de',
+    raw_content: 'Preciso lembrar de renovar o domínio até sexta e cobrar o cliente da proposta.',
+    key_takeaways: ['Preciso lembrar de renovar'], metadata: { pending_headline: { title: true }, outro: 1 }
+  }));
+  store.calls.headline = [];
+  store.saveHeadline = async (id, patch) => { store.calls.headline.push({ id, patch }); };
+  const gemini = fakeGemini({ atomize: baseAtomize });
+  const original = gemini.generateJson;
+  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações')
+    ? { title: 'Renovar domínio e cobrar proposta.', summary: 'Duas tarefas pendentes.', key_takeaways: ['Renovar o domínio até sexta', ' ', 'Cobrar o cliente da proposta'] }
+    : original(prompt));
+
+  await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(store.calls.headline.length, 1);
+  const { patch } = store.calls.headline[0];
+  assert.equal(patch.title, 'Renovar domínio e cobrar proposta');
+  assert.deepEqual(patch.keyTakeaways, ['Renovar o domínio até sexta', 'Cobrar o cliente da proposta']);
+  assert.deepEqual(patch.metadata, { outro: 1 });
+});
+
+test('nota rápida com título digitado: mantém o título e só gera pontos-chave', async () => {
+  const store = fakeStore(item({ source_type: 'note', metadata: { pending_headline: { title: false } } }));
+  store.calls.headline = [];
+  store.saveHeadline = async (id, patch) => { store.calls.headline.push(patch); };
+  const gemini = fakeGemini({ atomize: baseAtomize });
+  const original = gemini.generateJson;
+  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações')
+    ? { title: 'Outro título', summary: 'Resumo novo.', key_takeaways: ['Ponto A'] }
+    : original(prompt));
+
+  await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(store.calls.headline[0].title, null);
+  assert.deepEqual(store.calls.headline[0].keyTakeaways, ['Ponto A']);
+});
+
+test('nota rápida: se a IA falhar no título, a pendência continua e a indexação segue', async () => {
+  const store = fakeStore(item({ source_type: 'note', metadata: { pending_headline: { title: true } } }));
+  store.calls.headline = [];
+  store.saveHeadline = async (id, patch) => { store.calls.headline.push(patch); };
+  const gemini = fakeGemini({ atomize: baseAtomize });
+  const original = gemini.generateJson;
+  gemini.generateJson = async prompt => (prompt.includes('nomeia e resume anotações') ? { title: '', key_takeaways: [] } : original(prompt));
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(store.calls.headline.length, 0);
+  assert.equal(store.calls.replace.length, 1);
+  assert.ok(result.warnings.some(w => w.includes('título e pontos-chave')));
+});

@@ -259,7 +259,7 @@ const reviewStrip = createReviewStrip($('review-strip'), {
  */
 let loadSeq = 0;
 
-async function loadDashboardData({ quiet = false } = {}) {
+async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
   const seq = ++loadSeq;
   if (!quiet) itemsList.innerHTML = skeletonRowsHtml();
 
@@ -289,8 +289,16 @@ async function loadDashboardData({ quiet = false } = {}) {
     refreshIndexBanner();
   } catch (err) {
     if (seq !== loadSeq) return;
+    // Falha de rede passageira (comum no celular): tenta mais uma vez antes de mostrar o erro
+    if (err instanceof TypeError && !isRetry) {
+      setTimeout(() => {
+        if (seq === loadSeq) loadDashboardData({ quiet, isRetry: true });
+      }, 1500);
+      return;
+    }
     emptyState.hidden = true;
-    itemsList.innerHTML = `<div class="list-error">Erro ao carregar dados do Supabase: ${escapeHtml(err.message)}</div>`;
+    itemsList.innerHTML = `<div class="list-error">Erro ao carregar dados do Supabase: ${escapeHtml(err.message)}<br><button type="button" class="btn" data-retry-load>Tentar novamente</button></div>`;
+    itemsList.querySelector('[data-retry-load]')?.addEventListener('click', () => loadDashboardData());
   }
 }
 
