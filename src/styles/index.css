@@ -1094,8 +1094,7 @@ kbd {
     overflow: visible;
   }
   .brand-row { grid-column: 1 / -1; padding: 0; }
-  .command-trigger { grid-column: 1 / -1; }
-  .command-trigger kbd { display: none; }
+  .command-trigger { display: none; }
   .capture-btn, .side-nav, .side-group, .side-footer { display: none; }
 
   .main-container, .list-pane, .page-section { overflow: visible; height: auto; }
