@@ -2,6 +2,7 @@ import { getAtoms, getBrainItemById, getBrainOverview } from '../shared/services
 import { copyToClipboard } from '../shared/utils/formatters.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { icon } from '../shared/utils/icons.js';
+import { skeletonCardsHtml } from '../shared/utils/skeleton.js';
 
 const PAGE_SIZE = 40;
 
@@ -77,7 +78,7 @@ export function createKnowledgeView(container, { onOpenItem }) {
     const requestId = ++state.requestId;
     if (reset) {
       state.offset = 0;
-      listBox.innerHTML = '<div class="knowledge-empty">Carregando…</div>';
+      listBox.innerHTML = skeletonCardsHtml();
     }
     try {
       const atoms = await getAtoms({ kind: state.kind, search: state.search, limit: PAGE_SIZE, offset: state.offset });

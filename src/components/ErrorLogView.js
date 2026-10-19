@@ -8,6 +8,7 @@ import { STAGE_LABELS, CATEGORY_LABELS } from '../shared/utils/errorLog.js';
 import { copyToClipboard } from '../shared/utils/formatters.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { friendlyError } from '../shared/utils/friendlyError.js';
+import { skeletonCardsHtml } from '../shared/utils/skeleton.js';
 
 const PAGE_SIZE = 50;
 
@@ -110,7 +111,7 @@ export function createErrorLogView(container, { onOpenItem, onChange } = {}) {
     if (reset) {
       state.offset = 0;
       entries = [];
-      listBox.innerHTML = '<div class="knowledge-empty">Carregando…</div>';
+      listBox.innerHTML = skeletonCardsHtml(4);
     }
     try {
       const page = await getCaptureErrors({
