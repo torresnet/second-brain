@@ -7,3 +7,7 @@ verify_jwt = true
 
 [functions.brain-process]
 verify_jwt = true
+
+# Chamada pelo pg_cron sem sessão de usuário: autentica pelo segredo do Vault (header x-cron-secret).
+[functions.brain-index-worker]
+verify_jwt = false

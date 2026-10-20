@@ -46,6 +46,12 @@ Ambas exigem o token do dono (`owner_check`), a mesma regra do RLS.
 4. **n8n:** reimporte `n8n/second_brain_workflow.json` (só o nó novo "Enriquecer Conhecimento" mudou; as credenciais continuam as mesmas).
 5. **App:** publique o frontend (push na `main`). Ao entrar, clique em **Indexar agora** para processar os itens antigos.
 
+## Indexação em segundo plano (sem o app aberto)
+
+Notas importadas do Obsidian (ou que o n8n não conseguiu indexar) ficam `pending`. O pg_cron chama a função `brain-index-worker` a cada 2 minutos; ela indexa até 5 notas por rodada, para na cota do Gemini e retoma sozinha na rodada seguinte. Ativação, uma única vez: publique a função `brain-index-worker` (sem verificação de JWT: `supabase functions deploy brain-index-worker --use-api --no-verify-jwt --project-ref eicmqisneklcvhakvgce`) e aplique a migração `20261020100000_background_indexing.sql`. A migração gera o segredo do agendador dentro do Vault (ele nunca aparece no código nem em variáveis de ambiente) e agenda o job. Para pausar: `select cron.unschedule('brain-background-indexing');`.
+
+Acompanhar: `select * from cron.job_run_details order by start_time desc limit 10;` e o contador de pendentes no app. O botão "Indexar agora" continua funcionando; ambos usam a mesma reserva (`brain_claim_item`), então nunca processam a mesma nota ao mesmo tempo.
+
 ## Perguntas frequentes
 
 **Preciso clicar em "Indexar agora" sempre?** Não. Notas novas são indexadas automaticamente pelo n8n. O botão serve para as notas antigas (anteriores à v0.3) e reaparece só se alguma indexação falhar e a nota ficar pendente. Notas com "Falha na indexação" são refeitas pelo botão "Tentar de novo" dentro da nota.
