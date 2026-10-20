@@ -438,6 +438,25 @@ let autoIndexPausedUntil = 0;
 const AUTO_INDEX_QUOTA_PAUSE_MS = 30 * 60 * 1000;
 const AUTO_INDEX_NO_PROGRESS_PAUSE_MS = 5 * 60 * 1000;
 
+const INDEX_COUNT_POLL_MS = 10 * 1000;
+
+function setPendingCount(count) {
+  const countEl = indexingBanner.querySelector('#indexing-count');
+  const labelEl = indexingBanner.querySelector('#indexing-label');
+  if (!countEl || !labelEl) return;
+  countEl.textContent = String(count);
+  labelEl.textContent = count === 1 ? 'nota aguarda' : 'notas aguardam';
+}
+
+// Mantém o contador em tempo real quando a indexação ocorre em segundo plano (pg_cron/n8n)
+setInterval(async () => {
+  if (isIndexing || !isSignedIn || document.hidden) return;
+  const pending = await getPendingIndexCount().catch(() => null);
+  if (pending === null || isIndexing) return;
+  if (pending === 0 || indexingBanner.hidden) refreshIndexBanner();
+  else setPendingCount(pending);
+}, INDEX_COUNT_POLL_MS);
+
 async function refreshIndexBanner() {
   if (isIndexing) return;
   const pending = await getPendingIndexCount().catch(() => 0);
@@ -445,10 +464,11 @@ async function refreshIndexBanner() {
   if (!pending) return;
   indexingBanner.innerHTML = `
     ${icon('atom')}
-    <span><strong>${pending}</strong> ${pending === 1 ? 'nota aguarda' : 'notas aguardam'} a indexação de links, códigos e ferramentas.</span>
+    <span><strong id="indexing-count">${pending}</strong> <span id="indexing-label"></span> a indexação de links, códigos e ferramentas.</span>
     <button id="indexing-run-btn" class="chip-btn" type="button">Indexar agora</button>
     <span id="indexing-progress" class="indexing-progress"></span>
   `;
+  setPendingCount(pending);
   indexingBanner.querySelector('#indexing-run-btn').addEventListener('click', runIndexing);
   // Indexação automática; pausa após cota esgotada ou rodada sem progresso para não entrar em laço
   if (Date.now() >= autoIndexPausedUntil) runIndexing();
@@ -478,6 +498,7 @@ async function runIndexing() {
         if (r.status === 'done' || r.status === 'partial') processed++;
         else if (r.status === 'failed') failures++;
       }
+      setPendingCount(remaining);
       busyStreak = results.every(r => r.status === 'busy') ? busyStreak + 1 : 0;
       if (busyStreak >= 3 || remaining === 0) break;
     }
