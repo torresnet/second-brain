@@ -29,12 +29,16 @@ function fakeStore(row, { claim = true, replaceError = null } = {}) {
   };
 }
 
-function fakeGemini({ atomize, linkSummary, examples, embedErrors = [], failAtomize = false } = {}) {
+function fakeGemini({ atomize, linkSummary, examples, unify, embedErrors = [], failAtomize = false } = {}) {
   const calls = { prompts: [], embedTexts: [] };
   return {
     calls,
     generateJson: async prompt => {
       calls.prompts.push(prompt);
+      if (prompt.includes('Você unifica notas')) {
+        if (unify instanceof Error) throw unify;
+        return unify;
+      }
       if (prompt.includes('descreve o conteúdo de links')) {
         if (linkSummary instanceof Error) throw linkSummary;
         return linkSummary ?? { pages: [] };
@@ -383,4 +387,133 @@ test('IA sobrecarregada (5xx) em todas as partes: nota volta para pendente, não
   assert.equal(store.calls.failed.length, 0);
   assert.equal(store.calls.deferred.length, 1);
   assert.match(store.calls.deferred[0].msg, /sobrecarregada/);
+});
+
+// ---- notas mescladas: a IA unifica o conhecimento antes de indexar ----
+
+const merged = (overrides = {}) => item({
+  title: 'Nota A', source_url: 'https://a.com/x', raw_content: 'Texto A sobre o Remotion.\n\n--- Mesclado da nota "Nota B" (https://b.com/y) ---\nTexto B sobre o Remotion e o Motion Canvas.',
+  metadata: {
+    merged_sources: [{ title: 'Nota B', url: 'https://b.com/y', raw_content: 'Texto B sobre o Remotion e o Motion Canvas.' }],
+    pending_unify: {
+      base: { title: 'Nota A', url: 'https://a.com/x', summary: null, raw_content: 'Texto A sobre o Remotion.' },
+      sources: [{ title: 'Nota B', url: 'https://b.com/y', summary: null, raw_content: 'Texto B sobre o Remotion e o Motion Canvas.' }]
+    }
+  },
+  ...overrides
+});
+
+const unifiedAnswer = {
+  title: 'Remotion e Motion Canvas.',
+  summary: 'Duas ferramentas para criar vídeos com código.',
+  key_takeaways: ['Remotion cria vídeos com React', 'Motion Canvas anima com código'],
+  content: 'Remotion cria vídeos com React e Motion Canvas anima com código. Fontes: https://a.com/x e https://b.com/y. '.repeat(2)
+};
+
+function unifyStore(row) {
+  const store = fakeStore(row);
+  store.calls.unified = [];
+  store.calls.deferred = [];
+  store.saveUnified = async (id, patch) => { store.calls.unified.push({ id, patch }); };
+  store.markDeferred = async (id, msg) => { store.calls.deferred.push({ id, msg }); };
+  return store;
+}
+
+test('unificação: a IA lê as duas notas, grava o texto unificado e indexa a partir dele', async () => {
+  const store = unifyStore(merged());
+  const gemini = fakeGemini({ unify: unifiedAnswer, atomize: baseAtomize });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'done');
+  const unifyPrompts = gemini.calls.prompts.filter(p => p.includes('Você unifica notas'));
+  assert.equal(unifyPrompts.length, 1);
+  assert.match(unifyPrompts[0], /Texto A sobre o Remotion\./);
+  assert.match(unifyPrompts[0], /Texto B sobre o Remotion e o Motion Canvas\./);
+
+  const { patch } = store.calls.unified[0];
+  assert.equal(patch.title, 'Remotion e Motion Canvas');
+  assert.equal(patch.rawContent, unifiedAnswer.content.trim());
+  assert.equal('pending_unify' in patch.metadata, false);
+  assert.equal(patch.metadata.merged_sources.length, 1, 'as fontes originais continuam guardadas');
+  assert.ok(patch.metadata.unified_at);
+
+  const atomizePrompt = gemini.calls.prompts.find(p => p.includes('indexador de um Segundo Cérebro'));
+  assert.match(atomizePrompt, /Título: Remotion e Motion Canvas/);
+  assert.match(atomizePrompt, /Fontes: https:\/\/a\.com\/x e https:\/\/b\.com\/y/);
+  assert.doesNotMatch(atomizePrompt, /--- Mesclado da nota/);
+  assert.equal(store.calls.replace.length, 1);
+});
+
+test('unificação: sem cota da IA o pedido volta para a fila e nada é indexado nem perdido', async () => {
+  const store = unifyStore(merged());
+  const gemini = fakeGemini({ unify: Object.assign(new Error('Gemini HTTP 429: cota'), { status: 429 }), atomize: baseAtomize });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'quota');
+  assert.equal(store.calls.unified.length, 0);
+  assert.equal(store.calls.replace.length, 0);
+  assert.equal(store.calls.failed.length, 0);
+  assert.equal(store.calls.deferred.length, 1);
+  assert.match(store.calls.deferred[0].msg, /unificadas sozinhas quando a cota voltar/);
+  assert.equal(gemini.calls.prompts.length, 1, 'não gasta cota com a indexação enquanto a unificação não foi feita');
+});
+
+test('unificação: IA sobrecarregada (5xx) também espera na fila', async () => {
+  const store = unifyStore(merged());
+  const gemini = fakeGemini({ unify: Object.assign(new Error('x'), { status: 503 }) });
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+  assert.equal(result.status, 'quota');
+  assert.match(store.calls.deferred[0].msg, /sobrecarregada/);
+});
+
+test('unificação: resposta inutilizável marca falha explicando e mantém o pedido para reprocessar', async () => {
+  const store = unifyStore(merged());
+  const gemini = fakeGemini({ unify: { title: '', summary: '', key_takeaways: [] } });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(store.calls.unified.length, 0);
+  assert.match(store.calls.failed[0].msg, /Não foi possível unificar as notas/);
+});
+
+test('unificação: texto encurtado demais é descartado e o texto completo das duas notas é mantido', async () => {
+  const store = unifyStore(merged());
+  const gemini = fakeGemini({ unify: { ...unifiedAnswer, content: 'resumo' }, atomize: baseAtomize });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(result.status, 'done');
+  assert.equal(store.calls.unified[0].patch.rawContent, null);
+  assert.equal(store.calls.unified[0].patch.title, 'Remotion e Motion Canvas');
+  assert.ok(result.warnings.some(w => w.includes('encurtou demais')));
+});
+
+test('unificação: notas grandes demais só unificam título, resumo e pontos-chave', async () => {
+  const big = 'x'.repeat(30_000);
+  const row = merged();
+  row.metadata.pending_unify.base.raw_content = big;
+  row.metadata.pending_unify.sources[0].raw_content = big;
+  const store = unifyStore(row);
+  const gemini = fakeGemini({ unify: { title: 'Título', summary: 'Resumo.', key_takeaways: ['Ponto'] }, atomize: baseAtomize });
+
+  const result = await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  assert.equal(store.calls.unified[0].patch.rawContent, null);
+  assert.doesNotMatch(gemini.calls.prompts[0], /"content"/);
+  assert.ok(result.warnings.some(w => w.includes('grandes demais')));
+});
+
+test('unificação: o que a IA descartou das fontes originais não volta como átomo pela cobertura', async () => {
+  const row = merged();
+  row.metadata.merged_sources[0].raw_content = 'Veja https://descartado.com/pagina';
+  const store = unifyStore(row);
+  const gemini = fakeGemini({ unify: unifiedAnswer, atomize: { category: 'dev', use_cases: [], atoms: [] } });
+
+  await processItem('item-1', { store, gemini, safeFetch: okFetch, newId });
+
+  const urls = store.calls.replace[0].atoms.map(a => a.url);
+  assert.equal(urls.includes('https://descartado.com/pagina'), false);
 });

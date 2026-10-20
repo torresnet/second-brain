@@ -12,15 +12,20 @@ const ORIGIN_BY_TYPE = {
   note: 'Anotação de texto'
 };
 
+/** Link http(s) pronto para exibir (sem protocolo e sem www); `null` para qualquer outra coisa. */
+function safeLink(value) {
+  const url = typeof value === 'string' ? value.trim() : '';
+  if (!/^https?:\/\//i.test(url)) return null;
+  return { href: url, text: url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '') };
+}
+
 /**
  * De onde a nota veio: o link original (quando há) ou a origem descrita em texto.
  * @returns {{ href: string|null, text: string }}
  */
 export function noteOrigin(item) {
-  const url = typeof item?.source_url === 'string' ? item.source_url.trim() : '';
-  if (/^https?:\/\//i.test(url)) {
-    return { href: url, text: url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '') };
-  }
+  const link = safeLink(item?.source_url);
+  if (link) return link;
   const fileName = item?.metadata?.extracted_from_file;
   if (typeof fileName === 'string' && fileName.trim()) return { href: null, text: `Arquivo enviado: ${fileName.trim()}` };
   return { href: null, text: ORIGIN_BY_TYPE[item?.source_type] || 'Sem link de origem' };
@@ -64,4 +69,37 @@ export function noteExamples(item) {
     .filter(a => typeof a === 'string' && a.trim())
     .slice(0, MAX_EXAMPLES)
     .map(a => ({ title: a.trim(), scenario: '', how: '', uses: [] }));
+}
+
+/**
+ * Selo e fontes de uma nota que reúne outras (unificada). `null` quando a nota nunca foi mesclada.
+ * Enquanto a IA não terminou (cota esgotada), `pending` é verdadeiro e o selo diz que a unificação está na fila.
+ * @returns {{ count: number, pending: boolean, label: string, hint: string, sources: Array<{ title: string, href: string|null, text: string, date: string|null }> } | null}
+ */
+export function unifiedInfo(item) {
+  const meta = item?.metadata;
+  const merged = (Array.isArray(meta?.merged_sources) ? meta.merged_sources : []).filter(s => s && typeof s === 'object');
+  if (!merged.length) return null;
+
+  const pending = Boolean(meta.pending_unify);
+  const base = meta.pending_unify?.base ?? meta.unified_base ?? { title: null, url: item.source_url, created_at: item.created_at };
+  const sources = [base, ...merged].map(s => {
+    const link = safeLink(s.url);
+    return {
+      title: (typeof s.title === 'string' && s.title.trim()) || 'Sem título',
+      href: link?.href ?? null,
+      text: link?.text ?? '',
+      date: typeof s.created_at === 'string' ? s.created_at : null
+    };
+  });
+  const count = merged.length + 1;
+  return {
+    count,
+    pending,
+    label: pending ? 'Unificação na fila' : 'Unificada',
+    hint: pending
+      ? `Reúne ${count} notas. A IA ainda vai tirar as repetições e dar um título novo.`
+      : `Reúne ${count} notas, sem repetições`,
+    sources
+  };
 }

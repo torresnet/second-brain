@@ -74,6 +74,40 @@ Responda ESTRITAMENTE em JSON neste formato:
 }`;
 }
 
+export interface UnifyPromptNote {
+  title: string | null;
+  url: string | null;
+  summary: string | null;
+  raw_content: string | null;
+}
+
+export function buildUnifyPrompt(notes: UnifyPromptNote[], withContent: boolean): string {
+  const blocks = notes
+    .map((n, i) => `### NOTA ${i + 1}${i === 0 ? ' (a mais antiga, é a base)' : ''}
+Título: ${n.title ?? '(sem título)'}
+Link de origem: ${n.url ?? '(sem link)'}
+Resumo: ${truncate(n.summary ?? '', 800) || '(nenhum)'}
+${withContent ? `Conteúdo:\n"""\n${n.raw_content ?? ''}\n"""` : `Trecho do conteúdo:\n"""\n${truncate(n.raw_content ?? '', 4000)}\n"""`}`)
+    .join('\n\n');
+  const contentRule = withContent
+    ? `\n6. "content": o texto ÚNICO e completo da nota unificada, organizado por assunto (não por nota de origem). Mantenha TODA informação distinta das notas; remova só o que se repete (mesma ideia, mesmo trecho, mesmo link, mesmo código) e, quando as notas dizem o mesmo com palavras diferentes, fique com a versão mais completa. O que é novo na outra nota entra no ponto certo do texto. Código, comandos, prompts, valores e links: copie LITERALMENTE. Todo link das notas (inclusive o "Link de origem" de cada uma) precisa aparecer no texto. Não resuma: unificar é tirar repetição, não encurtar.`
+    : '';
+  const jsonShape = `{\n  "title": "...",\n  "summary": "...",\n  "key_takeaways": ["..."]${withContent ? ',\n  "content": "..."' : ''}\n}`;
+  return `Você unifica notas de um Segundo Cérebro pessoal. As notas abaixo tratam do mesmo assunto (ou do mesmo conteúdo salvo duas vezes). Produza UMA nota única que reúne o conhecimento de todas, sem repetição.
+
+${blocks}
+
+REGRAS OBRIGATÓRIAS
+1. NUNCA invente. Use só o que está nas notas.
+2. "title": título curto (3 a 8 palavras) que descreva a nota unificada como um todo, mais condizente que os títulos originais; sem aspas e sem ponto final.
+3. "summary": 1 a 2 frases dizendo o que a nota unificada contém.
+4. "key_takeaways": 2 a 6 pontos-chave da nota unificada, cada um uma frase curta e completa; sem repetir o mesmo ponto com palavras diferentes.
+5. Mantenha o idioma original do conteúdo; título, resumo e pontos-chave em português do Brasil.${contentRule}
+
+Responda ESTRITAMENTE em JSON neste formato:
+${jsonShape}`;
+}
+
 export interface PageToSummarize {
   n: number;
   url: string;

@@ -16,6 +16,10 @@ export const EXAMPLES_MIGRATION_PATH = fileURLToPath(
   new URL('../../supabase/migrations/20261017140000_practical_examples.sql', import.meta.url)
 );
 
+export const UNIFY_MIGRATION_PATH = fileURLToPath(
+  new URL('../../supabase/migrations/20261020110000_unify_notes.sql', import.meta.url)
+);
+
 // Reproduz o que já existe em produção antes da migração
 const BASE_SCHEMA = `
   create schema if not exists extensions;
@@ -46,6 +50,7 @@ export async function createDb({ applyMigration = true } = {}) {
     await db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
     await db.exec(readFileSync(DUPLICATES_MIGRATION_PATH, 'utf8'));
     await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
+    await db.exec(readFileSync(UNIFY_MIGRATION_PATH, 'utf8'));
   }
   return db;
 }
@@ -95,6 +100,7 @@ export async function createRlsDb({ ownerId, legacyMatchFunction = false } = {})
   await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
   await db.exec(HARDENING_MIGRATION_SQL);
   await db.exec(readFileSync(CAPTURE_ERRORS_MIGRATION_PATH, 'utf8'));
+  await db.exec(readFileSync(UNIFY_MIGRATION_PATH, 'utf8'));
   return db;
 }
 

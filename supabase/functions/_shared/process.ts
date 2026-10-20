@@ -9,8 +9,9 @@ import { examplesSearchText, normalizeExamples } from './examples.ts';
 import type { PracticalExample } from './examples.ts';
 import type { SafeFetch } from './crawl.ts';
 import type { Gemini } from './gemini.ts';
-import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt } from './prompts.ts';
+import { buildAtomizePrompt, buildExamplesPrompt, buildLinkSummaryPrompt, buildUnifyPrompt } from './prompts.ts';
 import { chunkText, extractUrls, isUnreadableCapture, normalizeUrl, slugify, splitWindows, truncate } from './text.ts';
+import { UNIFY_MAX_CHARS, parseUnified, pendingUnify, unifyNotes, unifyTotalChars } from './unify.ts';
 
 export interface ItemRow {
   id: string;
@@ -51,6 +52,16 @@ export interface HeadlinePatch {
   metadata: Record<string, unknown>;
 }
 
+export interface UnifiedPatch {
+  title: string;
+  summary: string;
+  keyTakeaways: string[];
+  /** Texto unificado; `null` mantém o texto atual da nota. */
+  rawContent: string | null;
+  /** Metadata já sem o pedido de unificação (as fontes originais continuam em `merged_sources`). */
+  metadata: Record<string, unknown>;
+}
+
 export interface ProcessStore {
   getItem(id: string): Promise<ItemRow | null>;
   claim(id: string): Promise<boolean>;
@@ -58,6 +69,8 @@ export interface ProcessStore {
   saveExamples(id: string, examples: PracticalExample[]): Promise<void>;
   /** Grava título (se houver), resumo, pontos-chave e o metadata já sem a pendência de cabeçalho. */
   saveHeadline?(id: string, headline: HeadlinePatch): Promise<void>;
+  /** Grava o resultado da unificação de notas (título, resumo, pontos-chave, texto e metadata). */
+  saveUnified?(id: string, patch: UnifiedPatch): Promise<void>;
   markFailed(id: string, message: string): Promise<void>;
   /** Cota da IA esgotada: volta o item para "pendente" (recuperável) em vez de marcá-lo como falho. */
   markDeferred(id: string, message: string): Promise<void>;
@@ -116,6 +129,11 @@ const isQuotaError = (e: unknown) => statusOf(e) === 429;
 // Cota ou instabilidade do provedor (408/5xx): recuperável, a nota volta para "pendente" em vez de "falha"
 const isDeferrableError = (e: unknown) => isQuotaError(e) || statusOf(e) === 408 || statusOf(e) >= 500;
 
+const UNIFY_QUOTA_MESSAGE = 'A IA atingiu o limite de uso por agora. As notas continuam salvas e serão unificadas sozinhas quando a cota voltar.';
+const UNIFY_OVERLOAD_MESSAGE = 'A IA está sobrecarregada no momento. As notas continuam salvas e serão unificadas sozinhas quando ela voltar.';
+// a unificação divide os 150 s da função com a indexação que vem logo depois
+const UNIFY_TIMEOUT_MS = 55_000;
+
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function listText(value: unknown): string {
@@ -146,10 +164,17 @@ function parseHeadline(out: Record<string, unknown>, pending: { title: boolean }
   return { title: title || null, summary, keyTakeaways, metadata };
 }
 
+// As fontes originais de uma unificação ficam guardadas no metadata, mas não são "conhecimento" da nota:
+// o que a unificação descartou não pode voltar como átomo pela cobertura de links/código.
+function metadataText(metadata: unknown): string {
+  if (!metadata || typeof metadata !== 'object') return '';
+  const { merged_sources: _sources, pending_unify: _request, ...rest } = metadata as Record<string, unknown>;
+  return Object.keys(rest).length ? JSON.stringify(rest) : '';
+}
+
 function sourceTexts(item: ItemRow): string[] {
   return [
-    item.raw_content, item.summary, listText(item.key_takeaways), listText(item.entities),
-    item.metadata ? JSON.stringify(item.metadata) : ''
+    item.raw_content, item.summary, listText(item.key_takeaways), listText(item.entities), metadataText(item.metadata)
   ].filter((t): t is string => Boolean(t));
 }
 
@@ -184,6 +209,50 @@ export async function processItem(itemId: string, deps: ProcessDeps): Promise<Pr
   const elapsed = () => Date.now() - startedAt;
   const hadKnowledge = item.analysis_status === 'done' || item.analysis_status === 'partial';
   try {
+    // 0) notas mescladas: a IA unifica o conhecimento antes de indexar. Sem cota, o pedido espera na fila.
+    const unifyRequest = store.saveUnified ? pendingUnify(item.metadata) : null;
+    if (unifyRequest) {
+      const withContent = unifyTotalChars(unifyRequest) <= UNIFY_MAX_CHARS;
+      let unified: ReturnType<typeof parseUnified> = null;
+      try {
+        const out = await gemini.generateJson(buildUnifyPrompt(unifyNotes(unifyRequest), withContent), { timeoutMs: UNIFY_TIMEOUT_MS, attempts: 1 });
+        unified = parseUnified(out, unifyRequest, { withContent });
+        if (!unified) throw new Error('A IA não devolveu a nota unificada em formato utilizável.');
+      } catch (error) {
+        if (isDeferrableError(error)) {
+          const message = isQuotaError(error) ? UNIFY_QUOTA_MESSAGE : UNIFY_OVERLOAD_MESSAGE;
+          await report({ stage: 'ai', category: categoryOf(error), severity: 'warning', message: `Unificação adiada: ${errText(error)}` });
+          await store.markDeferred(itemId, message);
+          return { ...empty, status: 'quota', warnings: [message] };
+        }
+        const message = truncate(`Não foi possível unificar as notas: ${errText(error)}`, 500);
+        await report({ stage: 'ai', category: categoryOf(error), severity: 'error', message });
+        await store.markFailed(itemId, message);
+        return { ...empty, status: 'failed', warnings: [message] };
+      }
+
+      const { pending_unify: _request, pending_headline: _headline, ...metadata } = (item.metadata ?? {}) as Record<string, unknown>;
+      const patch: UnifiedPatch = {
+        title: unified.title, summary: unified.summary, keyTakeaways: unified.keyTakeaways,
+        rawContent: unified.content,
+        // a "base" (título/link/data da nota mais antiga) é guardada na primeira unificação, para a ficha listar as fontes
+        metadata: {
+          ...metadata,
+          unified_base: metadata.unified_base ?? { title: unifyRequest.base.title, url: unifyRequest.base.url, created_at: unifyRequest.base.created_at ?? null },
+          unified_at: (deps.now?.() ?? new Date()).toISOString()
+        }
+      };
+      await store.saveUnified!(itemId, patch);
+      item.title = patch.title;
+      item.summary = patch.summary;
+      item.key_takeaways = patch.keyTakeaways;
+      item.raw_content = patch.rawContent ?? item.raw_content;
+      item.metadata = patch.metadata;
+      if (!withContent) warnings.push('Notas grandes demais para reescrever: o texto das duas foi mantido completo e só o título, o resumo e os pontos-chave foram unificados.');
+      else if (unified.content === null) warnings.push('A IA encurtou demais o texto unificado; o texto completo das duas notas foi mantido.');
+      if (unified.restoredLinks.length) warnings.push(`${unified.restoredLinks.length} link(s) das notas originais completado(s) automaticamente.`);
+    }
+
     let title = item.title?.trim() || 'Sem título';
     const texts = sourceTexts(item);
     const sourceUrls = extractUrls(...texts);

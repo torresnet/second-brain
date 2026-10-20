@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { indexStatus, noteExamples, noteOrigin } from '../../src/shared/utils/noteView.js';
+import { indexStatus, noteExamples, noteOrigin, unifiedInfo } from '../../src/shared/utils/noteView.js';
 
 test('origem: link original encurtado, sem protocolo e sem www', () => {
   assert.deepEqual(noteOrigin({ source_url: 'https://www.instagram.com/p/abc/' }), { href: 'https://www.instagram.com/p/abc/', text: 'instagram.com/p/abc' });
@@ -45,4 +45,46 @@ test('exemplos: no máximo 5, e "próximas ações" antigas só aparecem quando 
     ['a1', 'a2', 'a3', 'a4', 'a5']
   );
   assert.deepEqual(noteExamples({}), []);
+});
+
+const mergedSource = { title: 'Segunda nota', url: 'https://www.b.com/y/', created_at: '2026-10-02T10:00:00Z' };
+
+test('selo de unificação: nota nunca mesclada não tem selo', () => {
+  assert.equal(unifiedInfo({ metadata: {} }), null);
+  assert.equal(unifiedInfo({ metadata: { merged_sources: [] } }), null);
+  assert.equal(unifiedInfo({}), null);
+});
+
+test('selo de unificação: nota unificada lista as duas fontes com os dois links', () => {
+  const info = unifiedInfo({
+    source_url: 'https://a.com/x',
+    metadata: { merged_sources: [mergedSource], unified_base: { title: 'Primeira nota', url: 'https://a.com/x', created_at: '2026-10-01T10:00:00Z' } }
+  });
+  assert.equal(info.label, 'Unificada');
+  assert.equal(info.count, 2);
+  assert.equal(info.pending, false);
+  assert.deepEqual(info.sources.map(s => [s.title, s.href, s.text]), [
+    ['Primeira nota', 'https://a.com/x', 'a.com/x'],
+    ['Segunda nota', 'https://www.b.com/y/', 'b.com/y']
+  ]);
+  assert.equal(info.sources[1].date, '2026-10-02T10:00:00Z');
+});
+
+test('selo de unificação: enquanto a IA não terminou o selo avisa que está na fila', () => {
+  const info = unifiedInfo({
+    metadata: {
+      merged_sources: [mergedSource],
+      pending_unify: { base: { title: 'Primeira nota', url: 'https://a.com/x' }, sources: [mergedSource] }
+    }
+  });
+  assert.equal(info.label, 'Unificação na fila');
+  assert.equal(info.pending, true);
+  assert.equal(info.sources[0].title, 'Primeira nota');
+});
+
+test('selo de unificação: link inseguro ou ausente não vira href', () => {
+  const info = unifiedInfo({ metadata: { merged_sources: [{ title: 'X', url: 'javascript:alert(1)' }, { url: null }] }, source_url: null });
+  assert.deepEqual(info.sources.map(s => s.href), [null, null, null]);
+  assert.equal(info.sources[2].title, 'Sem título');
+  assert.equal(info.count, 3);
 });

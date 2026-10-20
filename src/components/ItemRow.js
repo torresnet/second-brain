@@ -2,6 +2,7 @@ import { getMediaBadge } from '../shared/utils/formatters.js';
 import { formatRelativeBR } from '../shared/utils/time.js';
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { icon } from '../shared/utils/icons.js';
+import { unifiedInfo } from '../shared/utils/noteView.js';
 
 const STATUS_CHIPS = {
   pending: { label: 'aguardando indexação', cssClass: 'meta-warn' },
@@ -15,6 +16,7 @@ const STATUS_CHIPS = {
 export function createItemRow(item, { onSelect, onToggleFavorite, isSelected = false }) {
   const badge = getMediaBadge(item.source_type);
   const status = STATUS_CHIPS[item.analysis_status];
+  const unified = unifiedInfo(item);
   const tags = (item.tags || []).slice(0, 2).map(t => `<span>#${escapeHtml(t)}</span>`).join('');
 
   const row = document.createElement('div');
@@ -31,6 +33,7 @@ export function createItemRow(item, { onSelect, onToggleFavorite, isSelected = f
       <div class="row-meta">
         <span>${escapeHtml(badge.label)}</span>
         <span>${escapeHtml(formatRelativeBR(item.created_at))}</span>
+        ${unified ? `<span class="unified-chip is-compact${unified.pending ? ' is-pending' : ''}" title="${escapeHtml(unified.hint)}">${icon('layers')}${escapeHtml(unified.label)}</span>` : ''}
         ${status ? `<span class="${status.cssClass}">${status.label}</span>` : ''}
         ${tags}
       </div>

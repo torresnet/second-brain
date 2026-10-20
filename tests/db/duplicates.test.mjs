@@ -1,7 +1,7 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createDb, unitVector, blend, MIGRATION_PATH, DUPLICATES_MIGRATION_PATH } from '../helpers/db.mjs';
+import { createDb, unitVector, blend, MIGRATION_PATH, DUPLICATES_MIGRATION_PATH, UNIFY_MIGRATION_PATH } from '../helpers/db.mjs';
 
 let db;
 before(async () => { db = await createDb(); });
@@ -72,8 +72,10 @@ test('source_key é preenchida por trigger na criação e na troca do link, e no
   await old.close();
 });
 
-test('migração de duplicatas é idempotente', async () => {
+test('migração de duplicatas é idempotente (e a de unificação, que a sucede, também)', async () => {
   await db.exec(readFileSync(DUPLICATES_MIGRATION_PATH, 'utf8'));
+  await db.exec(readFileSync(UNIFY_MIGRATION_PATH, 'utf8'));
+  await db.exec(readFileSync(UNIFY_MIGRATION_PATH, 'utf8'));
 });
 
 test('brain_find_duplicates_by_url acha o mesmo link escrito de outro jeito e nada para link novo', async () => {
@@ -143,6 +145,50 @@ test('mesclar: junta conteúdo, tags, entidades e favorito; registra a origem; m
   assert.equal(k.analysis_status, 'pending');
   assert.equal(k.metadata.merged_sources[0].title, 'Repetida');
   assert.equal((await db.query('select count(*)::int n from brain_items where id=$1', [remove])).rows[0].n, 0);
+});
+
+test('mesclar guarda as duas notas originais e deixa o pedido de unificação para a IA', async () => {
+  const keep = await item('Original', { url: 'https://x.com/a', raw: 'texto A' });
+  const remove = await item('Repetida', { url: 'https://x.com/b', raw: 'texto B' });
+  await db.query("update brain_items set summary = 'resumo A' where id = $1", [keep]);
+
+  await db.query('select public.brain_merge_items($1,$2)', [keep, remove]);
+  const { metadata, source_url } = (await db.query('select metadata, source_url from brain_items where id=$1', [keep])).rows[0];
+
+  assert.equal(source_url, 'https://x.com/a');
+  assert.equal(metadata.merged_sources.length, 1);
+  assert.deepEqual(
+    [metadata.merged_sources[0].title, metadata.merged_sources[0].url, metadata.merged_sources[0].raw_content],
+    ['Repetida', 'https://x.com/b', 'texto B']
+  );
+  assert.deepEqual(
+    [metadata.pending_unify.base.title, metadata.pending_unify.base.url, metadata.pending_unify.base.raw_content, metadata.pending_unify.base.summary],
+    ['Original', 'https://x.com/a', 'texto A', 'resumo A']
+  );
+  assert.deepEqual(metadata.pending_unify.sources.map(s => s.raw_content), ['texto B']);
+});
+
+test('mesclagens seguidas acrescentam fontes sem sobrescrever o "antes" da nota mantida', async () => {
+  const keep = await item('Base', { raw: 'texto da base' });
+  const second = await item('Segunda', { raw: 'texto 2' });
+  const third = await item('Terceira', { raw: 'texto 3' });
+
+  await db.query('select public.brain_merge_items($1,$2)', [keep, second]);
+  await db.query('select public.brain_merge_items($1,$2)', [keep, third]);
+  const { metadata } = (await db.query('select metadata from brain_items where id=$1', [keep])).rows[0];
+
+  assert.equal(metadata.pending_unify.base.raw_content, 'texto da base');
+  assert.deepEqual(metadata.pending_unify.sources.map(s => s.title), ['Segunda', 'Terceira']);
+  assert.deepEqual(metadata.merged_sources.map(s => s.title), ['Segunda', 'Terceira']);
+});
+
+test('mesclar: nota mantida sem link herda o link da removida', async () => {
+  const keep = await item('Sem link', { raw: 'a' });
+  const remove = await item('Com link', { url: 'https://x.com/b', raw: 'b' });
+  await db.query('select public.brain_merge_items($1,$2)', [keep, remove]);
+  const row = (await db.query('select source_url, source_key from brain_items where id=$1', [keep])).rows[0];
+  assert.equal(row.source_url, 'https://x.com/b');
+  assert.equal(row.source_key, 'x.com/b');
 });
 
 test('mesclar conteúdo idêntico não duplica o texto', async () => {

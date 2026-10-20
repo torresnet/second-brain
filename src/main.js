@@ -111,10 +111,29 @@ const detail = createItemDetail({
     detail.close();
     await loadDashboardData({ quiet: true });
     openItemById(keepId);
-    // reindexa em segundo plano para os itens extraídos refletirem o conteúdo mesclado
-    processItemKnowledge(keepId)
-      .catch(() => null)
-      .finally(() => { loadDashboardData({ quiet: true }); });
+    // A IA unifica as notas em segundo plano. Sem cota, o pedido fica na fila e o worker termina quando ela voltar
+    const title = state.items.find(i => i.id === keepId)?.title || 'notas';
+    captureQueue.enqueue({
+      kind: 'task',
+      label: `Unificando: ${title}`,
+      run: async () => {
+        const result = await processItemKnowledge(keepId);
+        const outcome = result?.results?.[0] ?? result;
+        if (outcome?.status === 'quota') {
+          return { message: 'A IA está sem cota agora: a unificação ficou na fila e termina sozinha quando ela voltar.', warning: true };
+        }
+        if (outcome?.status === 'busy') return { message: 'A unificação já está em andamento.', warning: true };
+        if (outcome?.status === 'failed') {
+          throw new Error(friendlyError(outcome.warnings?.[0], 'Não foi possível unificar as notas. Abra a nota e use "Indexar novamente".'));
+        }
+        return outcome?.status === 'partial'
+          ? { message: 'Notas unificadas; a indexação ficou parcial.', warning: true }
+          : { message: 'Notas unificadas.', warning: false };
+      }
+    }).done.finally(() => {
+      loadDashboardData({ quiet: true });
+      refreshIndexBanner();
+    });
   },
   onOpenRelated: (id) => openItemById(id),
   onReprocess: async (id) => {

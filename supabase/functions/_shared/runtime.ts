@@ -126,6 +126,17 @@ export function createProcessStore(supabase: SupabaseClient): ProcessStore {
       const { error } = await supabase.from('brain_items').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
     },
+    async saveUnified(id, unified) {
+      const patch: Record<string, unknown> = {
+        title: unified.title,
+        summary: unified.summary,
+        key_takeaways: unified.keyTakeaways,
+        metadata: unified.metadata
+      };
+      if (unified.rawContent) patch.raw_content = unified.rawContent;
+      const { error } = await supabase.from('brain_items').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async markFailed(id, message) {
       await supabase
         .from('brain_items')

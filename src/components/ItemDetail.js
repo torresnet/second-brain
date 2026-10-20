@@ -3,7 +3,7 @@ import { getItemAtoms, getPossibleDuplicates, setDuplicateDecision } from '../sh
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { friendlyError } from '../shared/utils/friendlyError.js';
 import { icon } from '../shared/utils/icons.js';
-import { indexStatus, noteExamples, noteOrigin } from '../shared/utils/noteView.js';
+import { indexStatus, noteExamples, noteOrigin, unifiedInfo } from '../shared/utils/noteView.js';
 import { atomCardHtml } from './KnowledgeView.js';
 
 const COPY_FEEDBACK_MS = 2000;
@@ -28,6 +28,7 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     <header class="detail-head">
       <span id="detail-type" class="type-chip"></span>
       <span id="detail-stage" class="stage-chip"></span>
+      <span id="detail-unified" class="unified-chip" hidden></span>
       <span id="detail-date" class="detail-date"></span>
       <div class="detail-head-actions">
         <a id="detail-source-link" class="icon-btn" href="#" target="_blank" rel="noopener noreferrer" aria-label="Abrir fonte original" title="Abrir fonte original">${icon('external')}</a>
@@ -48,6 +49,11 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
           <button id="detail-reprocess-btn" class="chip-btn" type="button">Reprocessar</button>
         </section>
       </div>
+
+      <section id="detail-sources-section" class="detail-callout callout-unified" hidden>
+        <div class="detail-label">${icon('layers')}<span id="detail-sources-label"></span></div>
+        <ul id="detail-sources-list" class="sources-list"></ul>
+      </section>
 
       <section id="detail-dup-section" class="detail-callout callout-warn" hidden>
         <div class="detail-label">${icon('alert')}Possível duplicata</div>
@@ -103,6 +109,10 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
   const $ = (id) => root.querySelector(`#${id}`);
   const typeEl = $('detail-type');
   const stageEl = $('detail-stage');
+  const unifiedEl = $('detail-unified');
+  const sourcesSection = $('detail-sources-section');
+  const sourcesLabel = $('detail-sources-label');
+  const sourcesList = $('detail-sources-list');
   const dateEl = $('detail-date');
   const titleEl = $('detail-title');
   const sourceLink = $('detail-source-link');
@@ -163,6 +173,8 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     stageEl.textContent = stage.short;
     stageEl.title = stage.label;
 
+    renderUnified(item);
+
     dateEl.textContent = formatDateBR(item.created_at);
     titleEl.textContent = item.title || 'Sem título';
 
@@ -215,7 +227,7 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
         <div class="dup-actions">
           <button type="button" class="chip-btn" data-dup="open">Ver a outra nota</button>
           <button type="button" class="chip-btn" data-dup="keep">Manter as duas</button>
-          <button type="button" class="chip-btn" data-dup="merge" title="Junta o conteúdo das duas e mantém a nota mais antiga">Mesclar</button>
+          <button type="button" class="chip-btn" data-dup="merge" title="A IA lê as duas notas, junta o que é novo, tira o que se repete e dá um título novo. Fica a nota mais antiga.">Unificar</button>
           <button type="button" class="chip-btn danger" data-dup="delete">Apagar esta</button>
         </div>
       </div>`).join('');
@@ -251,10 +263,10 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
         const keep = otherIsOlder ? otherId : item.id;
         const keepTitle = otherIsOlder ? otherTitle : item.title;
         const removeTitle = otherIsOlder ? item.title : otherTitle;
-        const ok = confirm(`Juntar “${removeTitle}” em “${keepTitle}”?\n\nO conteúdo das duas fica na nota mais antiga e a outra é apagada. Isso não pode ser desfeito.`);
+        const ok = confirm(`Unificar “${removeTitle}” e “${keepTitle}” em uma nota só?\n\nA IA junta o conhecimento das duas, sem repetições, e cria um título novo. A nota mais antiga é mantida e a outra sai da lista (o texto original dela fica guardado nas fontes). Se a IA estiver sem cota, a unificação espera na fila e termina sozinha.`);
         if (!ok) return;
         buttons.forEach(b => { b.disabled = true; });
-        dupStatus.textContent = 'Mesclando…';
+        dupStatus.textContent = 'Unificando…';
         await onMerge(keep, otherIsOlder ? item.id : otherId);
       }
     } catch (err) {
@@ -284,6 +296,22 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     originEl.innerHTML = hasUrl && origin.href
       ? `${icon('link')}<a href="${escapeHtml(origin.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(origin.text)}</a>`
       : `${icon('note')}<span>${escapeHtml(origin.text)}</span>`;
+  }
+
+  function renderUnified(item) {
+    const info = unifiedInfo(item);
+    unifiedEl.hidden = sourcesSection.hidden = !info;
+    unifiedEl.classList.toggle('is-pending', Boolean(info?.pending));
+    if (!info) return;
+    unifiedEl.innerHTML = `${icon('layers')}${escapeHtml(info.label)}`;
+    unifiedEl.title = info.hint;
+    sourcesLabel.textContent = info.pending ? `Reunindo ${info.count} notas` : `Unificada a partir de ${info.count} notas`;
+    sourcesList.innerHTML = info.sources.map(s => `
+      <li>
+        <strong>${escapeHtml(s.title)}</strong>
+        ${s.href ? `<a href="${escapeHtml(s.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.text)}</a>` : '<span class="detail-hint">sem link</span>'}
+        ${s.date ? `<span class="detail-hint">salva em ${escapeHtml(formatDateBR(s.date))}</span>` : ''}
+      </li>`).join('');
   }
 
   function renderIndexStatus(item) {
