@@ -305,6 +305,7 @@ def read_metadata(workdir):
                 "description": (info.get("description") or "")[:4000],
                 "uploader": info.get("uploader") or info.get("channel") or "",
                 "duration": info.get("duration") or 0,
+                "webpage_url": info.get("webpage_url") or info.get("original_url") or "",
             }
     return {}
 

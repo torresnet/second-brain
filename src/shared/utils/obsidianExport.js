@@ -1,7 +1,7 @@
 // Monta o .md exportado para o Obsidian. O conteúdo vem de páginas externas (via IA), então
 // nada é gravado cru: frontmatter com escape YAML e blocos executáveis por plugins neutralizados.
 
-import { noteExamples, noteOrigin } from './noteView.js';
+import { noteExamples, noteOrigin, noteOriginLinks } from './noteView.js';
 
 const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f\u2028\u2029]+', 'g');
 const oneLine = (value) => neutralizeExecutable(String(value ?? '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim());
@@ -55,6 +55,13 @@ export function buildObsidianMarkdown(item, { stageIcon, stageLabel, dateLabel }
     ? `## 💡 Como aplicar na prática\n${examples.map((e, i) => `### ${i + 1}. ${oneLine(e.title)}${e.scenario ? `\n**Cenário:** ${neutralizeExecutable(e.scenario)}\n` : ''}${e.how ? `\n${neutralizeExecutable(e.how)}` : ''}`).join('\n\n')}\n\n---\n\n`
     : '';
 
+  const originLinksLine = noteOriginLinks(item)
+    .map((l) => ({ ...l, href: safeHttpUrl(l.href) }))
+    .filter((l) => l.href)
+    .map((l) => `> - **${l.kind === 'repo' ? 'Repositório' : 'Site'}:** [${oneLine(l.label || l.text).replace(/[\[\]]/g, ' ')}](${markdownLinkTarget(l.href)})
+`)
+    .join('');
+
   const entities = Array.isArray(item.entities)
     ? item.entities.map((e) => neutralizeExecutable(String(e ?? '')).replace(/[\[\]|#^\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean)
     : [];
@@ -76,7 +83,7 @@ ${tags}
 > - **Tipo:** ${sourceType.toUpperCase()}
 > - **Estágio:** ${stageIcon} ${stageLabel}
 > - **Origem:** ${url ? `[Link da Fonte](${markdownLinkTarget(url)})` : oneLine(noteOrigin(item).text)}
-> - **Entidades / Conceitos Relacionados:** ${entitiesFormatted}
+${originLinksLine}> - **Entidades / Conceitos Relacionados:** ${entitiesFormatted}
 > - **Catalogado em:** ${dateLabel}
 
 ---

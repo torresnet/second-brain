@@ -87,3 +87,19 @@ test('erro de cota do Gemini vira mensagem de limite de uso', () => {
   const out = runParse({ error: { message: '429 - "{\\"error\\":{\\"status\\":\\"RESOURCE_EXHAUSTED\\"}}"' } });
   assert.match(out.summary, /limite de uso/);
 });
+
+test('Parse Resposta Gemini anexa repositório e site de origem em metadata.origin_links', async () => {
+  const code = node('Parse Resposta Gemini').parameters.jsCode;
+  const ctx = { warnings: [], sourceType: 'reel', url: 'https://www.instagram.com/reel/abc/', hint: '', fileName: null,
+    meta: { title: 'x', description: 'Código em https://github.com/dono/repo.', uploader: 'a', canonical: 'https://www.instagram.com/reel/abc/' } };
+  const gemini = { candidates: [{ content: { parts: [{ text: JSON.stringify({
+    title: 't', summary: 's', raw_content: 'veja https://ferramenta.dev/?utm_source=x e https://ferramenta.dev/',
+    origin_links: [{ url: 'https://gitlab.com/g/p', kind: 'repo', label: 'g/p' }, { url: 'ftp://x', kind: 'site' }]
+  }) }] } }] };
+  const fn = new Function('$', '$input', code.replace(/^/, 'return (() => {') + '})()');
+  const [{ json }] = fn(() => ({ first: () => ({ json: ctx }) }), { first: () => ({ json: gemini }) });
+  const links = json.metadata.origin_links;
+  assert.deepEqual(links.map(l => l.kind + ' ' + l.url), [
+    'repo https://gitlab.com/g/p', 'repo https://github.com/dono/repo', 'site https://ferramenta.dev/?utm_source=x'
+  ]);
+});

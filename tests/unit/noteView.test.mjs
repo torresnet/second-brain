@@ -88,3 +88,17 @@ test('selo de unificação: link inseguro ou ausente não vira href', () => {
   assert.equal(info.sources[2].title, 'Sem título');
   assert.equal(info.count, 3);
 });
+
+test('noteOriginLinks lista repositórios e sites, sem repetir o link principal nem aceitar esquemas perigosos', async () => {
+  const { noteOriginLinks } = await import('../../src/shared/utils/noteView.js');
+  const links = noteOriginLinks({
+    source_url: 'https://site.com/a',
+    metadata: { origin_links: [
+      { url: 'https://github.com/dono/repo', kind: 'repo', label: 'dono/repo' },
+      { url: 'https://site.com/a/', kind: 'site' },
+      { url: 'javascript:alert(1)', kind: 'site' },
+      'https://exemplo.dev'
+    ] }
+  });
+  assert.deepEqual(links.map(l => [l.kind, l.href]), [['repo', 'https://github.com/dono/repo'], ['site', 'https://exemplo.dev']]);
+});

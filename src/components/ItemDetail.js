@@ -3,7 +3,7 @@ import { getItemAtoms, getPossibleDuplicates, setDuplicateDecision } from '../sh
 import { escapeHtml } from '../shared/utils/markdown.js';
 import { friendlyError } from '../shared/utils/friendlyError.js';
 import { icon } from '../shared/utils/icons.js';
-import { indexStatus, noteExamples, noteOrigin, unifiedInfo } from '../shared/utils/noteView.js';
+import { indexStatus, noteExamples, noteOrigin, noteOriginLinks, unifiedInfo } from '../shared/utils/noteView.js';
 import { atomCardHtml } from './KnowledgeView.js';
 
 const COPY_FEEDBACK_MS = 2000;
@@ -296,6 +296,8 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     originEl.innerHTML = hasUrl && origin.href
       ? `${icon('link')}<a href="${escapeHtml(origin.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(origin.text)}</a>`
       : `${icon('note')}<span>${escapeHtml(origin.text)}</span>`;
+    originEl.innerHTML += noteOriginLinks(item).map(l =>
+      `<span class="detail-origin-extra">${icon('link')}<strong>${l.kind === 'repo' ? 'Repositório' : 'Site'}</strong> <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.label || l.text)}</a></span>`).join('');
   }
 
   function renderUnified(item) {

@@ -1229,3 +1229,5 @@ kbd {
   color: var(--danger); background: var(--danger-soft);
   padding: .05rem .4rem; border-radius: 999px; font-weight: 600;
 }
+.detail-origin-extra { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.detail-origin-extra strong { font-weight: 600; color: var(--text-2); }

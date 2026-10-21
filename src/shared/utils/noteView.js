@@ -31,6 +31,27 @@ export function noteOrigin(item) {
   return { href: null, text: ORIGIN_BY_TYPE[item?.source_type] || 'Sem link de origem' };
 }
 
+/**
+ * Repositórios e sites encontrados no material (metadata.origin_links), sem repetir o link principal da nota.
+ * @returns {{ href: string, text: string, kind: 'repo'|'site', label: string }[]}
+ */
+export function noteOriginLinks(item) {
+  const raw = Array.isArray(item?.metadata?.origin_links) ? item.metadata.origin_links : [];
+  const mainHref = safeLink(item?.source_url)?.href.replace(/\/$/, '').toLowerCase();
+  const seen = new Set();
+  const links = [];
+  for (const entry of raw) {
+    const link = safeLink(typeof entry === 'string' ? entry : entry?.url);
+    if (!link) continue;
+    const key = link.href.replace(/\/$/, '').toLowerCase();
+    if (key === mainHref || seen.has(key)) continue;
+    seen.add(key);
+    const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+    links.push({ ...link, kind: entry?.kind === 'repo' ? 'repo' : 'site', label });
+  }
+  return links;
+}
+
 const STATUS = {
   done: { tone: 'ok', label: 'Indexada', action: 'Reprocessar' },
   pending: { tone: 'warn', label: 'Aguardando indexação avançada', action: 'Indexar agora' },
