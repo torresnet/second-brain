@@ -308,6 +308,20 @@ export async function getPossibleDuplicates(itemId, minSimilarity = 0.9) {
 }
 
 /**
+ * Todos os pares de notas duplicadas (mesmo link ou muito parecidas) ainda sem decisão.
+ * `unavailable` indica que a migração 20261021110000_duplicate_pairs.sql ainda não foi aplicada.
+ */
+export async function getDuplicatePairs({ minSimilarity = 0.9, limit = 50 } = {}) {
+  const { data, error } = await supabase.rpc('brain_duplicate_pairs', {
+    p_min_similarity: minSimilarity,
+    p_limit: limit
+  });
+  if (!error) return { pairs: data || [], unavailable: false };
+  if (error.code === 'PGRST202' || error.code === '42883') return { pairs: [], unavailable: true };
+  throw new Error(error.message);
+}
+
+/**
  * "Manter as duas": o aviso deste par não aparece mais
  */
 export async function setDuplicateDecision(itemA, itemB) {

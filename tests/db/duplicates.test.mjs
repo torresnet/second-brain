@@ -210,3 +210,43 @@ test('mesclar apaga o conhecimento extraído da nota removida e recusa pares inv
   await assert.rejects(db.query('select public.brain_merge_items($1,$1)', [keep]), /par_invalido/);
   await assert.rejects(db.query('select public.brain_merge_items($1,$2)', [keep, crypto.randomUUID()]), /item_nao_encontrado/);
 });
+
+const pairs = async (min = 0.9, limit = 50) =>
+  (await db.query('select * from public.brain_duplicate_pairs($1, $2)', [min, limit])).rows;
+
+test('pares duplicados: lista mesmo link e quase iguais com os dados das duas notas, sem repetir o par', async () => {
+  const base = unitVector(3);
+  const a = await item('Aula', { url: 'https://exemplo.com/p', vec: base });
+  const b = await item('Aula de novo', { url: 'https://www.exemplo.com/p/?utm_source=z', vec: blend(base, unitVector(4), 0.97) });
+  const c = await item('Outra', { vec: blend(base, unitVector(9), 0.97) });
+  await item('Distante', { vec: unitVector(7) });
+  await db.query("update brain_items set summary = 'resumo A' where id = $1", [a]);
+
+  const rows = await pairs();
+  const ids = rows.map(r => [r.a_id, r.b_id].sort().join('|')).sort();
+  assert.deepEqual(ids, [[a, b], [a, c], [b, c]].map(p => p.sort().join('|')).sort());
+
+  const linkRow = rows.find(r => r.reason === 'mesmo_link');
+  assert.equal(linkRow.similarity, 1);
+  assert.equal([linkRow.a_id, linkRow.b_id].sort().join('|'), [a, b].sort().join('|'));
+  const withSummary = linkRow.a_id === a ? linkRow.a_summary : linkRow.b_summary;
+  assert.equal(withSummary, 'resumo A');
+  assert.equal(rows[0].reason, 'mesmo_link');
+});
+
+test('pares duplicados: "manter as duas" tira o par da lista, e o limite vale', async () => {
+  const a = await item('A', { url: 'https://x.com/p' });
+  const b = await item('B', { url: 'https://x.com/p' });
+  await item('C', { url: 'https://y.com/p' });
+  await item('D', { url: 'https://y.com/p' });
+  assert.equal((await pairs()).length, 2);
+  assert.equal((await pairs(0.9, 1)).length, 1);
+  await db.query('select public.brain_set_duplicate_decision($1,$2)', [b, a]);
+  assert.equal((await pairs()).length, 1);
+});
+
+test('pares duplicados: base sem duplicatas devolve lista vazia', async () => {
+  await item('A', { url: 'https://x.com/a', vec: unitVector(1) });
+  await item('B', { url: 'https://x.com/b', vec: unitVector(2) });
+  assert.deepEqual(await pairs(), []);
+});

@@ -66,10 +66,6 @@ export function errorCardHtml(entry) {
 
 export function createErrorLogView(container, { onOpenItem, onChange } = {}) {
   container.innerHTML = `
-    <div class="section-heading">
-      <h1>Falhas</h1>
-      <p>Tudo o que deu errado ou ficou incompleto na captura de links, vídeos, áudios, imagens e arquivos, para você acompanhar e resolver.</p>
-    </div>
     <div class="errlog-controls">
       <div class="chip-row scroll" id="errlog-status"></div>
       <div class="chip-row scroll" id="errlog-severity"></div>

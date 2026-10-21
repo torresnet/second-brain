@@ -24,8 +24,7 @@ import { createBrainChat } from './components/BrainChat.js';
 import { createGraphView } from './components/GraphView.js';
 import { createKnowledgeView } from './components/KnowledgeView.js';
 import { createAlertCenter } from './components/AlertCenter.js';
-import { createErrorLogView } from './components/ErrorLogView.js';
-import { getOpenCaptureErrorCount, onCaptureErrorsChange } from './shared/services/errorLogService.js';
+import { createAlertsView } from './components/AlertsView.js';
 import { createCaptureToasts } from './components/CaptureToasts.js';
 import { createCommandPalette } from './components/CommandPalette.js';
 import { createFeedFilters } from './components/FeedFilters.js';
@@ -52,7 +51,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 // Estado da Aplicação
 const state = {
-  currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat' | 'errors'
+  currentTab: 'feed', // 'feed' | 'knowledge' | 'graph' | 'chat' | 'alerts'
   filterType: 'all',
   filterTag: '',
   searchQuery: '',
@@ -71,7 +70,7 @@ const sections = {
   knowledge: $('section-knowledge'),
   graph: $('section-graph'),
   chat: $('section-chat'),
-  errors: $('section-errors')
+  alerts: $('section-alerts')
 };
 const itemsList = $('items-list');
 const emptyState = $('empty-state-container');
@@ -108,35 +107,10 @@ const detail = createItemDetail({
     switchTab('graph');
     graphView.showLocal(item.id);
   },
-  onMerge: async (keepId, removeId) => {
-    await mergeItems(keepId, removeId);
-    detail.close();
-    await loadDashboardData({ quiet: true });
-    openItemById(keepId);
-    // A IA unifica as notas em segundo plano. Sem cota, o pedido fica na fila e o worker termina quando ela voltar
-    const title = state.items.find(i => i.id === keepId)?.title || 'notas';
-    captureQueue.enqueue({
-      kind: 'task',
-      label: `Unificando: ${title}`,
-      run: async () => {
-        const result = await processItemKnowledge(keepId);
-        const outcome = result?.results?.[0] ?? result;
-        if (outcome?.status === 'quota') {
-          return { message: 'A IA está sem cota agora: a unificação ficou na fila e termina sozinha quando ela voltar.', warning: true };
-        }
-        if (outcome?.status === 'busy') return { message: 'A unificação já está em andamento.', warning: true };
-        if (outcome?.status === 'failed') {
-          throw new Error(friendlyError(outcome.warnings?.[0], 'Não foi possível unificar as notas. Abra a nota e use "Indexar novamente".'));
-        }
-        return outcome?.status === 'partial'
-          ? { message: 'Notas unificadas; a indexação ficou parcial.', warning: true }
-          : { message: 'Notas unificadas.', warning: false };
-      }
-    }).done.finally(() => {
-      loadDashboardData({ quiet: true });
-      refreshIndexBanner();
-    });
-  },
+  onMerge: (keepId, removeId) => unifyNotes(keepId, removeId, {
+    onMerged: () => { detail.close(); },
+    openKeep: true
+  }),
   onOpenRelated: (id) => openItemById(id),
   onReprocess: async (id) => {
     // Roda na fila de segundo plano: o aviso de sucesso/erro aparece mesmo se a ficha for fechada
@@ -183,6 +157,40 @@ function openItem(item) {
   detail.open(item, { inline: state.currentTab === 'feed' && WIDE_READER.matches });
 }
 
+/**
+ * Junta duas notas e deixa a IA unificar o texto em segundo plano. Sem cota, o pedido fica
+ * na fila e o worker termina quando ela voltar.
+ */
+async function unifyNotes(keepId, removeId, { onMerged, openKeep = false } = {}) {
+  await mergeItems(keepId, removeId);
+  onMerged?.();
+  await loadDashboardData({ quiet: true });
+  if (openKeep) openItemById(keepId);
+  const title = state.items.find(i => i.id === keepId)?.title || 'notas';
+  captureQueue.enqueue({
+    kind: 'task',
+    label: `Unificando: ${title}`,
+    run: async () => {
+      const result = await processItemKnowledge(keepId);
+      const outcome = result?.results?.[0] ?? result;
+      if (outcome?.status === 'quota') {
+        return { message: 'A IA está sem cota agora: a unificação ficou na fila e termina sozinha quando ela voltar.', warning: true };
+      }
+      if (outcome?.status === 'busy') return { message: 'A unificação já está em andamento.', warning: true };
+      if (outcome?.status === 'failed') {
+        throw new Error(friendlyError(outcome.warnings?.[0], 'Não foi possível unificar as notas. Abra a nota e use "Indexar novamente".'));
+      }
+      return outcome?.status === 'partial'
+        ? { message: 'Notas unificadas; a indexação ficou parcial.', warning: true }
+        : { message: 'Notas unificadas.', warning: false };
+    }
+  }).done.finally(() => {
+    loadDashboardData({ quiet: true });
+    refreshIndexBanner();
+    alertsView.refreshCounts();
+  });
+}
+
 async function openItemById(id) {
   const item = await getBrainItemById(id).catch(() => null);
   if (item) openItem(item);
@@ -212,7 +220,6 @@ createCaptureToasts(captureQueue);
 captureQueue.subscribe(() => {
   if (state.currentTab === 'feed') renderItemsList();
 });
-createAlertCenter($('alert-center-mount'), captureQueue, { onOpenItem: openItemById });
 
 window.addEventListener('beforeunload', (e) => {
   if (!captureQueue.hasActive()) return;
@@ -243,22 +250,31 @@ function updateGraphView() {
   });
 }
 
-const navCountErrors = $('nav-count-errors');
-const errorLogView = createErrorLogView($('errors-mount-point'), {
+const navCountAlerts = $('nav-count-alerts');
+const alertCenter = createAlertCenter($('alert-center-mount'), {
+  onOpen: () => {
+    switchTab('alerts');
+    alertsView.showPending();
+  }
+});
+const alertsView = createAlertsView($('alerts-mount-point'), captureQueue, {
   onOpenItem: openItemById,
-  onChange: refreshErrorCount
+  onMerge: (keepId, removeId) => unifyNotes(keepId, removeId),
+  onTotalChange: (total) => {
+    alertCenter.setCount(total);
+    navCountAlerts.textContent = total ? String(total) : '';
+    navCountAlerts.title = total ? `${total} alerta(s) pendente(s)` : '';
+  }
 });
 
-async function refreshErrorCount() {
-  const count = await getOpenCaptureErrorCount();
-  navCountErrors.textContent = count ? String(count) : '';
-  navCountErrors.title = count ? `${count} falha(s) de captura pendente(s)` : '';
+// A busca de duplicatas compara todas as notas: fora da página de alertas, no máximo a cada 5 min
+const ALERT_REFRESH_MIN_MS = 5 * 60 * 1000;
+let lastAlertRefresh = 0;
+function refreshAlertCountsThrottled() {
+  if (Date.now() - lastAlertRefresh < ALERT_REFRESH_MIN_MS) return;
+  lastAlertRefresh = Date.now();
+  alertsView.refreshCounts();
 }
-
-onCaptureErrorsChange(() => {
-  refreshErrorCount();
-  if (state.currentTab === 'errors') errorLogView.refresh();
-});
 
 // Barra de comando: link captura, pergunta vai para o chat, termo busca no acervo
 const palette = createCommandPalette({
@@ -338,6 +354,7 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
     renderReview();
     updateGraphView();
     refreshIndexBanner();
+    refreshAlertCountsThrottled();
   } catch (err) {
     if (seq !== loadSeq) return;
     // Falha de rede passageira (comum no celular): tenta mais uma vez antes de mostrar o erro
@@ -580,7 +597,7 @@ function switchTab(tab) {
 
   if (tab === 'graph') updateGraphView();
   if (tab === 'knowledge') knowledgeView.refresh();
-  if (tab === 'errors') errorLogView.refresh();
+  if (tab === 'alerts') alertsView.show();
 }
 
 document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -705,7 +722,7 @@ function applySession(session) {
     loadDashboardData();
     captureQueue.restore();
     startLiveUpdates();
-    refreshErrorCount();
+    refreshAlertCountsThrottled();
     return;
   }
 
