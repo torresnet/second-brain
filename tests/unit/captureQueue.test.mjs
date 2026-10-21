@@ -233,3 +233,44 @@ test('captura que falha continua guardada para nova tentativa, até o limite', a
   await queue.restore();
   assert.equal(pending.records.size, 0);
 });
+
+test('hasUnsaved: captura guardada no armazenamento durável não bloqueia recarregar a página', async () => {
+  const pending = memoryPending();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const { queue } = setup({ pending, execute: async () => { await gate; return { message: 'ok', warning: false }; } });
+
+  const job = queue.enqueue(link());
+  assert.equal(queue.hasUnsaved(), true, 'antes de gravar ainda não está seguro');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(queue.hasActive(), true);
+  assert.equal(queue.hasUnsaved(), false, 'depois de gravar, a recarga retoma o link');
+
+  release();
+  await job.done;
+  assert.equal(queue.hasUnsaved(), false);
+});
+
+test('hasUnsaved: sem armazenamento durável ou se a gravação falha, avisa; tarefas avulsas também', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const slow = async () => { await gate; return { message: 'ok', warning: false }; };
+
+  const noStore = setup({ execute: slow });
+  noStore.queue.enqueue(link());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(noStore.queue.hasUnsaved(), true);
+
+  const broken = memoryPending();
+  broken.save = async () => { throw new Error('cheio'); };
+  const failing = setup({ pending: broken, execute: slow });
+  failing.queue.enqueue(link('https://b.com/y'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(failing.queue.hasUnsaved(), true);
+
+  const task = setup({ pending: memoryPending() });
+  task.queue.enqueue({ kind: 'task', label: 't', run: () => gate.then(() => ({ message: 'ok', warning: false })) });
+  assert.equal(task.queue.hasUnsaved(), true);
+
+  release();
+});

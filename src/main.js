@@ -222,7 +222,7 @@ captureQueue.subscribe(() => {
 });
 
 window.addEventListener('beforeunload', (e) => {
-  if (!captureQueue.hasActive()) return;
+  if (!captureQueue.hasUnsaved()) return;
   e.preventDefault();
   e.returnValue = '';
 });
@@ -250,7 +250,6 @@ function updateGraphView() {
   });
 }
 
-const navCountAlerts = $('nav-count-alerts');
 const alertCenter = createAlertCenter($('alert-center-mount'), {
   onOpen: () => {
     switchTab('alerts');
@@ -262,8 +261,6 @@ const alertsView = createAlertsView($('alerts-mount-point'), captureQueue, {
   onMerge: (keepId, removeId) => unifyNotes(keepId, removeId),
   onTotalChange: (total) => {
     alertCenter.setCount(total);
-    navCountAlerts.textContent = total ? String(total) : '';
-    navCountAlerts.title = total ? `${total} alerta(s) pendente(s)` : '';
   }
 });
 

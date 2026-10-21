@@ -127,7 +127,9 @@ export function createCaptureQueue({ execute, findDuplicates, storage, onItemSav
     const key = spec.persistKey || id;
     const { persistKey: _key, attempts: _attempts, ...cleanSpec } = spec;
     const record = { key, enqueuedAt: spec.restoredAt || Date.now(), attempts: spec.attempts || 0, spec: cleanSpec };
-    const done = pending.save(record).catch(() => {}).then(() => run(id, spec, key));
+    const done = pending.save(record)
+      .then(() => patchJob(id, { durable: true }), () => {})
+      .then(() => run(id, spec, key));
     return { id, done };
   }
 
@@ -186,10 +188,15 @@ export function createCaptureQueue({ execute, findDuplicates, storage, onItemSav
     return jobs.some((job) => job.status === 'processing');
   }
 
+  // Só o que não está guardado no armazenamento durável se perde ao recarregar a página
+  function hasUnsaved() {
+    return jobs.some((job) => job.status === 'processing' && !job.durable);
+  }
+
   function subscribe(listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
   }
 
-  return { enqueue, restore, resolveAlert, dismissJob, hasActive, subscribe, getSnapshot };
+  return { enqueue, restore, resolveAlert, dismissJob, hasActive, hasUnsaved, subscribe, getSnapshot };
 }
