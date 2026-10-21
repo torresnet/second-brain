@@ -81,10 +81,12 @@ function finalize(nodes, links) {
       link.target.noteDegree++;
     }
   }
+  const maxItem = Math.max(1, ...nodes.filter((n) => n.type === 'item').map((n) => n.degree));
+  const maxHub = Math.max(1, ...nodes.filter((n) => n.type !== 'item').map((n) => n.degree));
   for (const n of nodes) {
     n.radius = n.type === 'item'
-      ? 5 + Math.min(8, 1.6 * Math.sqrt(n.degree))
-      : 3.5 + Math.min(5, 1.1 * Math.sqrt(n.degree));
+      ? 3.5 + 8 * Math.sqrt(n.degree / maxItem)
+      : 2.5 + 5 * Math.sqrt(n.degree / maxHub);
   }
   const importance = (n) => (n.type === 'item' ? n.degree + 0.5 : n.degree * 0.8);
   [...nodes]

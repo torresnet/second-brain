@@ -1,7 +1,7 @@
 import { APP_CONFIG } from '../shared/constants/config.js';
 
 const FALLBACK_COLOR = '#6C6D75';
-const LABEL_FONT_PX = 12;
+const LABEL_FONT_PX = 11.5;
 const LABEL_GAP = 3;
 const LABEL_PAD = 4;
 const FULL_TITLE_ZOOM = 1.6;
@@ -10,20 +10,27 @@ const CULL_MARGIN = 40;
 const COLLISION_CELL = 96;
 const MEASURE_CACHE_MAX = 4000;
 
-// `color` é a chave da paleta lida do tema (ver readPalette); `alpha` suaviza a linha
+// Fios finos e translúcidos (px na tela): a malha vira textura, não massa. `fade` = faixa de zoom em que ganha corpo
 const LINK_STYLES = {
-  tag: { color: 'line', alpha: 0.5, dash: [] },
-  entity: { color: 'entity', alpha: 0.25, dash: [] },
-  shared: { color: 'accent', alpha: 0.8, dash: [] },
-  similar: { color: 'similar', alpha: 0.45, dash: [5, 5] }
+  tag: { color: 'muted', px: 0.7, alpha: 0.22, fade: [0.2, 1.0] },
+  entity: { color: 'entity', px: 0.7, alpha: 0.2, fade: [0.2, 1.0] },
+  shared: { color: 'accent', px: 1.1, alpha: 0.38, fade: [0.15, 0.8] },
+  similar: { color: 'similar', px: 0.7, alpha: 0.2, fade: [0.45, 1.3] }
 };
+const LINK_KIND_ORDER = ['entity', 'similar', 'tag', 'shared'];
+const DIMMED_LINK_FACTOR = 0.22;
+const HUB_GLOW_COUNT = 24;
+const NODE_ALPHA = 0.94;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-function linkWidth(link) {
-  if (link.kind === 'shared') return 1.5 + Math.min(3, link.weight * 0.7);
-  if (link.kind === 'similar') return 0.8 + clamp((link.weight - 0.5) * 5, 0, 2.2);
-  return 1;
+// Cresce de 0 a 1 entre dois níveis de zoom
+const fadeIn = (k, [from, to], floor = 0) => floor + (1 - floor) * clamp((k - from) / (to - from), 0, 1);
+
+function focusWidthPx(link) {
+  if (link.kind === 'shared') return 1.6 + Math.min(2.4, link.weight * 0.6);
+  if (link.kind === 'similar') return 1.1 + clamp((link.weight - 0.5) * 4, 0, 1.6);
+  return 1.2;
 }
 
 // O canvas não entende var(--cor): resolvemos as variáveis CSS do tema atual
@@ -111,51 +118,136 @@ function createOccupancy() {
   };
 }
 
+const linksByKindCache = new WeakMap();
+function linksByKind(model) {
+  let groups = linksByKindCache.get(model);
+  if (!groups) {
+    groups = Object.fromEntries(LINK_KIND_ORDER.map((kind) => [kind, []]));
+    for (const link of model.links) groups[link.kind]?.push(link);
+    linksByKindCache.set(model, groups);
+  }
+  return groups;
+}
+
 function drawLinks(ctx, { model, transform, palette, focus, width, height }) {
   const { x: tx, y: ty, k } = transform;
-  const scale = visualScale(k);
-  for (const link of model.links) {
+  const onScreen = (link) => {
     const ax = link.source.x * k + tx;
     const ay = link.source.y * k + ty;
     const bx = link.target.x * k + tx;
     const by = link.target.y * k + ty;
-    if ((ax < 0 && bx < 0) || (ay < 0 && by < 0) || (ax > width && bx > width) || (ay > height && by > height)) continue;
+    return !((ax < 0 && bx < 0) || (ay < 0 && by < 0) || (ax > width && bx > width) || (ay > height && by > height));
+  };
+  const isLit = (link) => (focus.center
+    ? link.source === focus.center || link.target === focus.center
+    : focus.set.has(link.source) && focus.set.has(link.target));
+  const groups = linksByKind(model);
 
-    const style = LINK_STYLES[link.kind];
-    const lit = !focus || (focus.center
-      ? link.source === focus.center || link.target === focus.center
-      : focus.set.has(link.source) && focus.set.has(link.target));
-    ctx.globalAlpha = style.alpha * (lit ? 1 : 0.08);
+  ctx.lineCap = 'round';
+  // Ligações em repouso: um traço único por tipo (rápido mesmo com milhares de fios)
+  for (const kind of LINK_KIND_ORDER) {
+    const style = LINK_STYLES[kind];
+    const ambient = style.alpha * fadeIn(k, style.fade, kind === 'similar' ? 0.25 : 0.6) * (focus ? DIMMED_LINK_FACTOR : 1);
+    if (ambient < 0.01) continue;
+    ctx.globalAlpha = ambient;
     ctx.strokeStyle = palette[style.color];
-    ctx.lineWidth = (linkWidth(link) + (focus && lit ? 0.8 : 0)) * scale;
-    ctx.setLineDash(style.dash.map((d) => d * scale));
+    ctx.lineWidth = style.px / k;
     ctx.beginPath();
-    ctx.moveTo(link.source.x, link.source.y);
-    ctx.lineTo(link.target.x, link.target.y);
+    for (const link of groups[kind]) {
+      if (focus && isLit(link)) continue;
+      if (!onScreen(link)) continue;
+      ctx.moveTo(link.source.x, link.source.y);
+      ctx.lineTo(link.target.x, link.target.y);
+    }
     ctx.stroke();
   }
+  if (!focus) return;
+
+  // Ligações do foco: nítidas, na cor do tipo
+  for (const kind of LINK_KIND_ORDER) {
+    const style = LINK_STYLES[kind];
+    ctx.strokeStyle = palette[kind === 'tag' ? 'accent' : style.color];
+    ctx.globalAlpha = kind === 'similar' ? 0.7 : 0.85;
+    for (const link of groups[kind]) {
+      if (!isLit(link) || !onScreen(link)) continue;
+      ctx.lineWidth = focusWidthPx(link) / k;
+      ctx.setLineDash(kind === 'similar' ? [5 / k, 5 / k] : []);
+      ctx.beginPath();
+      ctx.moveTo(link.source.x, link.source.y);
+      ctx.lineTo(link.target.x, link.target.y);
+      ctx.stroke();
+    }
+  }
   ctx.setLineDash([]);
+}
+
+function nodeFill(n, palette) {
+  return n.type === 'tag' ? palette.tag : n.type === 'entity' ? palette.entity : n.color;
 }
 
 function drawNodes(ctx, { model, transform, palette, focus, selected, hovered, width, height }) {
   const { x: tx, y: ty, k } = transform;
   const scale = visualScale(k);
   const visible = [];
+  const hot = [];
   for (const n of model.nodes) {
     const reach = nodeDrawRadius(n, k, 3) * k + CULL_MARGIN;
     const sx = n.x * k + tx;
     const sy = n.y * k + ty;
     if (sx < -reach || sy < -reach || sx > width + reach || sy > height + reach) continue;
     visible.push(n);
+    if (n === hovered || n === selected) {
+      hot.push(n);
+      continue;
+    }
 
-    const isHot = n === hovered || n === selected;
-    ctx.globalAlpha = !focus || focus.set.has(n) ? 1 : 0.18;
+    const dim = focus && !focus.set.has(n);
+    ctx.globalAlpha = dim ? 0.14 : n.type === 'item' ? NODE_ALPHA : 0.8;
     ctx.beginPath();
-    ctx.arc(n.x, n.y, nodeDrawRadius(n, k, isHot ? 3 : 0), 0, Math.PI * 2);
-    ctx.fillStyle = n.type === 'tag' ? palette.tag : n.type === 'entity' ? palette.entity : n.color;
+    ctx.arc(n.x, n.y, nodeDrawRadius(n, k), 0, Math.PI * 2);
+    ctx.fillStyle = nodeFill(n, palette);
     ctx.fill();
-    ctx.strokeStyle = n === selected ? palette.accent : isHot ? palette.text : palette.surface;
-    ctx.lineWidth = (n === selected ? 3 : isHot ? 2 : 1) * scale;
+    if (!dim && n.type === 'item') {
+      ctx.lineWidth = 0.9 * scale;
+      ctx.strokeStyle = palette.surface;
+      ctx.globalAlpha = 0.55;
+      ctx.stroke();
+    }
+  }
+
+  // Hubs mais importantes ganham um brilho suave (poucos, para não custar caro)
+  if (!focus) {
+    const onScreen = new Set(visible);
+    let glowed = 0;
+    for (const n of rankedNodes(model)) {
+      if (glowed >= HUB_GLOW_COUNT) break;
+      if (!onScreen.has(n) || n.type !== 'item') continue;
+      glowed++;
+      ctx.save();
+      ctx.shadowColor = n.color;
+      ctx.shadowBlur = 14;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, nodeDrawRadius(n, k) * 0.9, 0, Math.PI * 2);
+      ctx.fillStyle = n.color;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  for (const n of hot) {
+    ctx.save();
+    ctx.shadowColor = nodeFill(n, palette);
+    ctx.shadowBlur = 22;
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, nodeDrawRadius(n, k, 2), 0, Math.PI * 2);
+    ctx.fillStyle = nodeFill(n, palette);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = (n === selected ? 2.4 : 1.8) * scale;
+    ctx.strokeStyle = n === selected ? palette.accent : palette.text;
     ctx.stroke();
   }
   return new Set(visible);
@@ -164,8 +256,9 @@ function drawNodes(ctx, { model, transform, palette, focus, selected, hovered, w
 // Rótulos em tamanho fixo na tela; o zoom só abre espaço para mais deles aparecerem
 function drawLabels(ctx, { model, transform, palette, focus, selected, hovered }, visible) {
   const { x: tx, y: ty, k } = transform;
-  const share = clamp((k - 0.35) / 1.15, 0.12, 1);
-  const limit = Math.max(6, Math.ceil(model.nodes.length * share));
+  const share = clamp((k - 0.5) / 1.7, 0.02, 1);
+  const limit = Math.max(8, Math.ceil(model.nodes.length * share));
+  const headline = Math.max(4, Math.ceil(limit * 0.25));
   const occupied = createOccupancy();
   const isHot = (n) => n === hovered || n === selected;
 
@@ -181,12 +274,13 @@ function drawLabels(ctx, { model, transform, palette, focus, selected, hovered }
   ctx.lineJoin = 'round';
   for (const n of candidates) {
     const hot = isHot(n);
-    const weight = hot ? 600 : 400;
+    const strong = hot || (!focus && n.rank < headline);
+    const weight = hot ? 600 : strong ? 500 : 400;
     ctx.font = `${weight} ${LABEL_FONT_PX}px Geist, system-ui, sans-serif`;
     const text = labelText(n, hot ? FULL_TITLE_ZOOM : k);
     const w = textWidth(ctx, text, weight);
     const sx = n.x * k + tx;
-    const baseline = n.y * k + ty + nodeDrawRadius(n, k, hot ? 3 : 0) * k + LABEL_FONT_PX + LABEL_GAP;
+    const baseline = n.y * k + ty + nodeDrawRadius(n, k, hot ? 2 : 0) * k + LABEL_FONT_PX + LABEL_GAP;
     const rect = {
       x0: sx - w / 2 - LABEL_PAD,
       x1: sx + w / 2 + LABEL_PAD,
@@ -196,11 +290,12 @@ function drawLabels(ctx, { model, transform, palette, focus, selected, hovered }
     if (!hot && !occupied.isFree(rect)) continue;
     occupied.add(rect);
 
-    ctx.globalAlpha = !focus || focus.set.has(n) ? 1 : 0.18;
-    ctx.lineWidth = 3;
+    const dim = focus && !focus.set.has(n);
+    ctx.globalAlpha = dim ? 0.18 : strong ? 1 : 0.78;
+    ctx.lineWidth = 3.5;
     ctx.strokeStyle = palette.surface;
     ctx.strokeText(text, sx, baseline);
-    ctx.fillStyle = hot ? palette.text : palette.muted;
+    ctx.fillStyle = strong ? palette.text : palette.muted;
     ctx.fillText(text, sx, baseline);
   }
 }
