@@ -5,9 +5,11 @@ export const MAX_ZOOM = 4;
 export const ALPHA_DECAY = 0.99;
 export const ALPHA_MIN = 0.02;
 
-const REPULSE_RADIUS = 180;
-const REPULSE_DIVISOR = 12;
+const REPULSE_RADIUS = 240;
+const REPULSE_DIVISOR = 8;
 const GRAVITY = 0.002;
+const COLLISION_GAP = 6;
+const COLLISION_STRENGTH = 0.5;
 const SPRING = 0.035;
 const DAMPING = 0.88;
 const MAX_SPEED = 40;
@@ -74,6 +76,15 @@ function repel(a, b, alpha) {
   a.vy -= dy * force;
   b.vx += dx * force;
   b.vy += dy * force;
+
+  const minDist = a.radius + b.radius + COLLISION_GAP;
+  if (dist < minDist) {
+    const push = ((minDist - dist) / dist) * COLLISION_STRENGTH * Math.max(alpha, 0.3);
+    a.vx -= dx * push;
+    a.vy -= dy * push;
+    b.vx += dx * push;
+    b.vy += dy * push;
+  }
 }
 
 /**

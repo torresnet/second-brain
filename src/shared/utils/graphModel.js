@@ -83,8 +83,8 @@ function finalize(nodes, links) {
   }
   for (const n of nodes) {
     n.radius = n.type === 'item'
-      ? 8 + Math.min(12, 2.4 * Math.sqrt(n.degree))
-      : 5 + Math.min(8, 1.6 * Math.sqrt(n.degree));
+      ? 5 + Math.min(8, 1.6 * Math.sqrt(n.degree))
+      : 3.5 + Math.min(5, 1.1 * Math.sqrt(n.degree));
   }
   const importance = (n) => (n.type === 'item' ? n.degree + 0.5 : n.degree * 0.8);
   [...nodes]

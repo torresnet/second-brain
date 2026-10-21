@@ -12,10 +12,10 @@ const MEASURE_CACHE_MAX = 4000;
 
 // `color` é a chave da paleta lida do tema (ver readPalette); `alpha` suaviza a linha
 const LINK_STYLES = {
-  tag: { color: 'line', alpha: 1, dash: [] },
-  entity: { color: 'entity', alpha: 0.35, dash: [] },
+  tag: { color: 'line', alpha: 0.5, dash: [] },
+  entity: { color: 'entity', alpha: 0.25, dash: [] },
   shared: { color: 'accent', alpha: 0.8, dash: [] },
-  similar: { color: 'similar', alpha: 0.6, dash: [5, 5] }
+  similar: { color: 'similar', alpha: 0.45, dash: [5, 5] }
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -51,10 +51,10 @@ export function nodeColor(item) {
 }
 
 /**
- * Tamanho dos elementos no mundo. Na tela o nó cresce com k^0.3: em 4× fica ~1,5× maior (e não 4×),
+ * Tamanho dos elementos no mundo. Na tela o nó cresce com k^0.15: em 4× fica ~1,2× maior (e não 4×),
  * então o zoom revela espaço em vez de empastar tudo.
  */
-export const visualScale = (k) => k ** -0.7;
+export const visualScale = (k) => k ** -0.85;
 
 export const nodeDrawRadius = (node, k, extra = 0) => (node.radius + extra) * visualScale(k);
 
@@ -155,7 +155,7 @@ function drawNodes(ctx, { model, transform, palette, focus, selected, hovered, w
     ctx.fillStyle = n.type === 'tag' ? palette.tag : n.type === 'entity' ? palette.entity : n.color;
     ctx.fill();
     ctx.strokeStyle = n === selected ? palette.accent : isHot ? palette.text : palette.surface;
-    ctx.lineWidth = (n === selected ? 3 : isHot ? 2 : 1.5) * scale;
+    ctx.lineWidth = (n === selected ? 3 : isHot ? 2 : 1) * scale;
     ctx.stroke();
   }
   return new Set(visible);
