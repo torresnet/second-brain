@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { APP_CONFIG } from '../constants/config.js';
 import { sanitizeFilterTerm } from '../utils/postgrest.js';
+import { fetchAllPages } from '../utils/paginate.js';
 
 export const supabase = createClient(
   APP_CONFIG.supabase.url,
@@ -33,25 +34,29 @@ export function onAuthChange(callback) {
  * Busca todos os itens catalogados no Segundo Cérebro com filtros opcionais
  */
 export async function getBrainItems({ type = 'all', search = '', tag = '' } = {}) {
-  let query = supabase
-    .from('brain_items')
-    .select('*')
-    .order('created_at', { ascending: false });
+  const buildQuery = () => {
+    let query = supabase
+      .from('brain_items')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id');
 
-  if (type && type !== 'all') {
-    query = query.eq('source_type', type);
-  }
+    if (type && type !== 'all') {
+      query = query.eq('source_type', type);
+    }
 
-  if (tag) {
-    query = query.contains('tags', [tag]);
-  }
+    if (tag) {
+      query = query.contains('tags', [tag]);
+    }
 
-  if (search && search.trim() !== '') {
-    const term = `%${sanitizeFilterTerm(search)}%`;
-    query = query.or(`title.ilike.${term},summary.ilike.${term},raw_content.ilike.${term}`);
-  }
+    if (search && search.trim() !== '') {
+      const term = `%${sanitizeFilterTerm(search)}%`;
+      query = query.or(`title.ilike.${term},summary.ilike.${term},raw_content.ilike.${term}`);
+    }
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAllPages((from, to) => buildQuery().range(from, to));
   if (error) {
     console.error('Erro ao buscar itens do Segundo Cérebro:', error);
     throw error;
@@ -63,9 +68,11 @@ export async function getBrainItems({ type = 'all', search = '', tag = '' } = {}
  * Busca estatísticas agregadas (total de itens, favoritos, distribuição por tipo)
  */
 export async function getBrainStats() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllPages((from, to) => supabase
     .from('brain_items')
-    .select('id, source_type, is_favorite, tags');
+    .select('id, source_type, is_favorite, tags')
+    .order('id')
+    .range(from, to));
 
   if (error) {
     console.error('Erro ao calcular estatísticas:', error);
@@ -281,7 +288,11 @@ export async function getPendingIndexCount() {
  */
 export async function getItemLinks({ minSimilarity } = {}) {
   const params = minSimilarity === undefined ? {} : { p_min_similarity: minSimilarity };
-  const { data, error } = await supabase.rpc('brain_item_links', params);
+  const { data, error } = await fetchAllPages((from, to) => supabase
+    .rpc('brain_item_links', params)
+    .order('source_id')
+    .order('target_id')
+    .range(from, to));
   if (!error) return { links: data || [], failed: false };
   const missing = error.code === 'PGRST202' || error.code === '42883';
   return { links: [], failed: !missing };

@@ -18,9 +18,10 @@ import { loadGraphPrefs, saveGraphPrefs } from '../shared/utils/graphPrefs.js';
 import { insightsHtml, legendHtml, selectionHtml } from './graphPanelHtml.js';
 import { createGraphSearch } from './graphSearch.js';
 import { GRAPH_TEMPLATE } from './graphTemplate.js';
-import { drawGraph, nodeColor, readPalette } from './graphRenderer.js';
+import { drawGraph, nodeColor, nodeDrawRadius, readPalette } from './graphRenderer.js';
 
 const CLICK_MOVE_TOLERANCE = 5;
+const HIT_TOLERANCE_PX = 5;
 const DOUBLE_CLICK_MS = 350;
 const PREFS_SAVE_DELAY_MS = 400;
 const SIMILARITY_DEBOUNCE_MS = 120;
@@ -436,7 +437,7 @@ export function createGraphView(container, { onSelectNode, onFilterTag, onRetryL
   function nodeAt(pos) {
     for (let i = model.nodes.length - 1; i >= 0; i--) {
       const n = model.nodes[i];
-      if (Math.hypot(n.x - pos.x, n.y - pos.y) <= n.radius + 5) return n;
+      if (Math.hypot(n.x - pos.x, n.y - pos.y) <= nodeDrawRadius(n, transform.k) + HIT_TOLERANCE_PX / transform.k) return n;
     }
     return null;
   }
