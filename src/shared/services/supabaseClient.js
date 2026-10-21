@@ -245,6 +245,17 @@ export async function getBrainOverview() {
   return data || {};
 }
 
+/**
+ * Avisa a cada mudança em brain_items (inclusive status de processamento/indexação). Devolve a função que cancela.
+ */
+export function subscribeToItemChanges(onChange) {
+  const channel = supabase
+    .channel('brain-items-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'brain_items' }, onChange)
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}
+
 export async function getBrainItemById(id) {
   const { data, error } = await supabase.from('brain_items').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);

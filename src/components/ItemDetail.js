@@ -454,6 +454,16 @@ export function createItemDetail({ readerPane, onDelete, onReprocess, getRelated
     close,
     reposition,
     currentId: () => currentItem?.id ?? null,
+    // Atualiza a ficha aberta quando o banco muda (ex.: indexação terminou), sem mexer enquanto o usuário reprocessa
+    refresh(item) {
+      if (!currentItem || currentItem.id !== item.id || reprocessBtn.disabled) return;
+      const changed = item.analysis_status !== currentItem.analysis_status || item.analysis_updated_at !== currentItem.analysis_updated_at;
+      if (!changed) return;
+      currentItem = item;
+      renderIndexStatus(item);
+      renderExamples(item);
+      renderAtoms(item);
+    },
     isInline: () => placement === 'inline'
   };
 }

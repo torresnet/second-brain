@@ -163,3 +163,73 @@ test('tarefa avulsa que falha vira erro visível', async () => {
   assert.equal(job.status, 'error');
   assert.equal(job.message, 'IA indisponível');
 });
+
+function memoryPending(initial = []) {
+  const records = new Map(initial.map((r) => [r.key, r]));
+  return {
+    records,
+    save: async (record) => { records.set(record.key, record); },
+    remove: async (key) => { records.delete(key); },
+    all: async () => [...records.values()]
+  };
+}
+
+test('captura em andamento é gravada no armazenamento durável e removida ao concluir', async () => {
+  const pending = memoryPending();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { queue } = setup({ pending, execute: async () => { await gate; return { message: 'ok', warning: false }; } });
+
+  const { done } = queue.enqueue({ kind: 'note', label: 'n', title: '', body: 'texto', tags: [] });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(pending.records.size, 1);
+
+  release();
+  await done;
+  assert.equal(pending.records.size, 0);
+});
+
+test('tarefas avulsas (funções) não são persistidas', async () => {
+  const pending = memoryPending();
+  const { queue } = setup({ pending });
+  await queue.enqueue({ kind: 'task', label: 't', run: async () => ({ message: 'ok', warning: false }) }).done;
+  assert.equal(pending.records.size, 0);
+});
+
+test('restore reexecuta capturas interrompidas por uma recarga da página', async () => {
+  const pending = memoryPending([{ key: 'k1', enqueuedAt: Date.now(), attempts: 0, spec: { kind: 'note', label: 'n', title: 'a', body: 'b', tags: [] } }]);
+  const { queue, calls } = setup({ pending });
+
+  await queue.restore();
+
+  assert.equal(calls.execute.length, 1);
+  assert.equal(calls.execute[0].body, 'b');
+  assert.equal(pending.records.size, 0);
+});
+
+test('restore não duplica um link que já foi salvo depois do envio', async () => {
+  const enqueuedAt = Date.now() - 5000;
+  const pending = memoryPending([{ key: 'k1', enqueuedAt, attempts: 0, spec: link() }]);
+  const { queue, calls } = setup({
+    pending,
+    findDuplicates: async () => [{ id: 'n1', title: 't', created_at: new Date(enqueuedAt + 1000).toISOString() }]
+  });
+
+  await queue.restore();
+
+  assert.equal(calls.execute.length, 0);
+  assert.equal(queue.getSnapshot().alerts.length, 0);
+  assert.equal(pending.records.size, 0);
+});
+
+test('captura que falha continua guardada para nova tentativa, até o limite', async () => {
+  const pending = memoryPending();
+  const { queue } = setup({ pending, execute: async () => { throw new Error('rede'); } });
+  await queue.enqueue({ kind: 'note', label: 'n', title: '', body: 'x', tags: [] }).done;
+  assert.equal(pending.records.size, 1);
+
+  const [record] = pending.records.values();
+  record.attempts = 3;
+  await queue.restore();
+  assert.equal(pending.records.size, 0);
+});

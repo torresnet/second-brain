@@ -8,6 +8,7 @@ import {
   signOut,
   getBrainItemById,
   getItemLinks,
+  subscribeToItemChanges,
   getPendingIndexCount,
   findDuplicatesByUrl,
   mergeItems,
@@ -33,6 +34,7 @@ import { takeSharedFile } from './shared/services/captureService.js';
 import { parseSharedParams } from './shared/utils/sharedParams.js';
 import { createCaptureQueue } from './shared/services/captureQueue.js';
 import { executeCapture } from './shared/services/captureExecutor.js';
+import { createPendingStore } from './shared/services/pendingStore.js';
 import { setupThemeToggle } from './shared/services/theme.js';
 import { injectIconSprite, icon } from './shared/utils/icons.js';
 import { escapeHtml } from './shared/utils/markdown.js';
@@ -196,6 +198,7 @@ const captureQueue = createCaptureQueue({
   execute: executeCapture,
   findDuplicates: findDuplicatesByUrl,
   storage: safeLocalStorage(),
+  pending: createPendingStore(),
   onItemSaved: () => loadDashboardData({ quiet: true })
 });
 
@@ -448,6 +451,52 @@ function setPendingCount(count) {
   labelEl.textContent = count === 1 ? 'nota aguarda' : 'notas aguardam';
 }
 
+// Tempo real: mudanças em brain_items (processando, indexando, concluído) atualizam lista, ficha e contador.
+// O polling cobre o caso de o Realtime estar fora do ar (e é o que vale até a migração ser aplicada).
+const LIVE_POLL_MS = 4 * 1000;
+const LIVE_DEBOUNCE_MS = 300;
+const IN_PROGRESS = new Set(['pending', 'processing']);
+let stopLiveUpdates = null;
+let liveTimer = null;
+let liveBusy = false;
+
+async function refreshLive() {
+  if (!isSignedIn || liveBusy) return;
+  liveBusy = true;
+  try {
+    await loadDashboardData({ quiet: true });
+    const openId = detail.currentId();
+    const fresh = openId ? await getBrainItemById(openId).catch(() => null) : null;
+    if (fresh) detail.refresh(fresh);
+  } finally {
+    liveBusy = false;
+  }
+}
+
+function scheduleLiveRefresh() {
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(refreshLive, LIVE_DEBOUNCE_MS);
+}
+
+function startLiveUpdates() {
+  stopLiveUpdates?.();
+  const unsubscribe = subscribeToItemChanges(scheduleLiveRefresh);
+  const poll = setInterval(() => {
+    if (document.hidden) return;
+    const inProgress = state.items.some((item) => IN_PROGRESS.has(item.analysis_status));
+    if (inProgress || captureQueue.hasActive()) refreshLive();
+  }, LIVE_POLL_MS);
+  const onVisible = () => { if (!document.hidden) scheduleLiveRefresh(); };
+  document.addEventListener('visibilitychange', onVisible);
+  stopLiveUpdates = () => {
+    unsubscribe();
+    clearInterval(poll);
+    clearTimeout(liveTimer);
+    document.removeEventListener('visibilitychange', onVisible);
+    stopLiveUpdates = null;
+  };
+}
+
 // Mantém o contador em tempo real quando a indexação ocorre em segundo plano (pg_cron/n8n)
 setInterval(async () => {
   if (isIndexing || !isSignedIn || document.hidden) return;
@@ -654,10 +703,13 @@ function applySession(session) {
     appLayout.hidden = false;
     checkSharedParams();
     loadDashboardData();
+    captureQueue.restore();
+    startLiveUpdates();
     refreshErrorCount();
     return;
   }
 
+  stopLiveUpdates?.();
   appLayout.hidden = true;
   captureModal.close();
   palette.close();
