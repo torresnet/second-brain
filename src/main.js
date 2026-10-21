@@ -329,10 +329,12 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
   try {
     // O grafo mostra o acervo inteiro: filtros e busca da lista não podem esvaziá-lo
     const filtered = hasActiveFilter();
-    const [items, stats, linksResult, graphItems] = await Promise.all([
+    // As ligações são a parte mais pesada: a lista não espera por elas
+    const linksPromise = getItemLinks({ minSimilarity: SIMILARITY_FLOOR });
+    linksPromise.catch(() => {});
+    const [items, stats, graphItems] = await Promise.all([
       getBrainItems({ type: state.filterType, tag: state.filterTag, search: state.searchQuery }),
       getBrainStats(),
-      getItemLinks({ minSimilarity: SIMILARITY_FLOOR }),
       filtered ? getBrainItems() : null
     ]);
     // Uma recarga mais nova (outro filtro ou busca) já foi pedida: descarta esta resposta
@@ -341,8 +343,6 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
     state.items = items;
     state.graphItems = graphItems ?? items;
     state.stats = stats;
-    state.itemLinks = linksResult.links;
-    state.linksFailed = linksResult.failed;
 
     navCountFeed.textContent = String(stats.total || 0);
     filters.render(stats);
@@ -352,6 +352,12 @@ async function loadDashboardData({ quiet = false, isRetry = false } = {}) {
     updateGraphView();
     refreshIndexBanner();
     refreshAlertCountsThrottled();
+
+    const linksResult = await linksPromise.catch(() => ({ links: [], failed: true }));
+    if (seq !== loadSeq) return;
+    state.itemLinks = linksResult.links;
+    state.linksFailed = linksResult.failed;
+    updateGraphView();
   } catch (err) {
     if (seq !== loadSeq) return;
     // Falha de rede passageira (comum no celular): tenta mais uma vez antes de mostrar o erro

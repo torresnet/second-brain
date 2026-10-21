@@ -288,6 +288,10 @@ export async function getPendingIndexCount() {
  */
 export async function getItemLinks({ minSimilarity } = {}) {
   const params = minSimilarity === undefined ? {} : { p_min_similarity: minSimilarity };
+  // Uma única execução no servidor; a versão paginada refaz o cálculo inteiro a cada 1000 linhas
+  const single = await supabase.rpc('brain_item_links_json', params);
+  if (!single.error && Array.isArray(single.data)) return { links: single.data, failed: false };
+
   const { data, error } = await fetchAllPages((from, to) => supabase
     .rpc('brain_item_links', params)
     .order('source_id')
