@@ -51,10 +51,10 @@ export function nodeColor(item) {
 }
 
 /**
- * Tamanho dos elementos no mundo. Cresce só com a raiz do zoom: em 4× um nó fica 2× maior na tela
- * (e não 4×), então o zoom revela espaço em vez de empastar tudo.
+ * Tamanho dos elementos no mundo. Na tela o nó cresce com k^0.3: em 4× fica ~1,5× maior (e não 4×),
+ * então o zoom revela espaço em vez de empastar tudo.
  */
-export const visualScale = (k) => 1 / Math.sqrt(k);
+export const visualScale = (k) => k ** -0.7;
 
 export const nodeDrawRadius = (node, k, extra = 0) => (node.radius + extra) * visualScale(k);
 
