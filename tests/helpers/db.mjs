@@ -24,6 +24,10 @@ export const DUPLICATE_PAIRS_MIGRATION_PATH = fileURLToPath(
   new URL('../../supabase/migrations/20261021110000_duplicate_pairs.sql', import.meta.url)
 );
 
+export const SPARSE_LINKS_MIGRATION_PATH = fileURLToPath(
+  new URL('../../supabase/migrations/20261021130000_sparse_item_links.sql', import.meta.url)
+);
+
 // Reproduz o que já existe em produção antes da migração
 const BASE_SCHEMA = `
   create schema if not exists extensions;
@@ -56,6 +60,7 @@ export async function createDb({ applyMigration = true } = {}) {
     await db.exec(readFileSync(EXAMPLES_MIGRATION_PATH, 'utf8'));
     await db.exec(readFileSync(UNIFY_MIGRATION_PATH, 'utf8'));
     await db.exec(readFileSync(DUPLICATE_PAIRS_MIGRATION_PATH, 'utf8'));
+    await db.exec(readFileSync(SPARSE_LINKS_MIGRATION_PATH, 'utf8'));
   }
   return db;
 }

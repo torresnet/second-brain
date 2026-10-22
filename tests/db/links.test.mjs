@@ -90,3 +90,25 @@ test('nunca liga uma nota a ela mesma', async () => {
   await item('A', { entities: ['X', 'x'], atoms: [{ name: 'T', canonical_key: 'k:t' }, { name: 'T2', canonical_key: 'k:t2' }] });
   assert.deepEqual(await links(), []);
 });
+
+test('termo citado por muitas notas não liga as notas entre si (vira só nó de entidade)', async () => {
+  for (let i = 0; i < 10; i++) await item(`Nota ${i}`, { entities: ['Índice de comandos'] });
+  assert.deepEqual(await links(), []);
+  assert.ok((await links(2, 0.62, 12)).length > 0);
+});
+
+test('grupo grande que cita o mesmo termo não vira clique: no máximo as mais fortes por nota', async () => {
+  for (let i = 0; i < 8; i++) await item(`Nota ${i}`, { entities: ['Tema'] });
+  const rows = await links(0, 0.62, 8, 2);
+  assert.ok(rows.length <= 8 * 2, `esperava no máximo 16 ligações, veio ${rows.length}`);
+  const touched = new Set(rows.flatMap((r) => [r.source_id, r.target_id]));
+  assert.equal(touched.size, 8);
+});
+
+test('com o limite apertado, o termo raro vence o termo comum', async () => {
+  const a = await item('A', { entities: ['raro', 'comum'] });
+  const x = await item('X', { entities: ['raro'] });
+  for (let i = 0; i < 6; i++) await item(`Outra ${i}`, { entities: ['comum'] });
+  const rows = await links(0, 0.62, 8, 1);
+  assert.ok(rows.some((r) => [r.source_id, r.target_id].sort().join() === [a, x].sort().join()));
+});
